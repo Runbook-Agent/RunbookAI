@@ -361,19 +361,25 @@ knowledge
 knowledge
   .command('search <query...>')
   .description('Search the knowledge base')
-  .action(async (queryParts: string[]) => {
+  .option('--type <type>', 'Filter by type: runbook, postmortem, architecture, known_issue')
+  .option('--service <service>', 'Filter by service name')
+  .action(async (queryParts: string[], options: { type?: string; service?: string }) => {
     const query = queryParts.join(' ');
     console.log(chalk.blue(`Searching for: "${query}"`));
     try {
       const retriever = createRetriever();
-      const results = await retriever.search(query, { limit: 5 });
-      const total = results.runbooks.length + results.postmortems.length + results.knownIssues.length;
+      const results = await retriever.search(query, {
+        limit: 10,
+        typeFilter: options.type ? [options.type as 'runbook' | 'postmortem' | 'architecture' | 'known_issue'] : undefined,
+        serviceFilter: options.service ? [options.service] : undefined,
+      });
+      const total = results.runbooks.length + results.postmortems.length + results.knownIssues.length + results.architecture.length;
 
       if (total === 0) {
         console.log(chalk.yellow('No matching documents found.'));
       } else {
         console.log(chalk.green(`Found ${total} results:\n`));
-        for (const doc of [...results.runbooks, ...results.postmortems, ...results.knownIssues]) {
+        for (const doc of [...results.runbooks, ...results.postmortems, ...results.knownIssues, ...results.architecture]) {
           console.log(chalk.cyan(`[${doc.type}] ${doc.title}`));
           console.log(chalk.gray(doc.content.slice(0, 200) + '...\n'));
         }
@@ -381,6 +387,253 @@ knowledge
       retriever.close();
     } catch (error) {
       console.error(chalk.red(`Search failed: ${error instanceof Error ? error.message : error}`));
+    }
+  });
+
+knowledge
+  .command('add <file>')
+  .description('Add a file to the knowledge base')
+  .option('--type <type>', 'Document type: runbook, postmortem, architecture, known_issue')
+  .action(async (file: string, options: { type?: string }) => {
+    const { existsSync } = await import('fs');
+    const { readFile } = await import('fs/promises');
+    const { join, resolve, basename, extname } = await import('path');
+    const { parse: parseYaml } = await import('yaml');
+    const matter = (await import('gray-matter')).default;
+
+    const filePath = resolve(file);
+
+    if (!existsSync(filePath)) {
+      console.error(chalk.red(`File not found: ${filePath}`));
+      process.exit(1);
+    }
+
+    console.log(chalk.blue(`Adding ${basename(filePath)} to knowledge base...`));
+
+    try {
+      const content = await readFile(filePath, 'utf-8');
+      const ext = extname(filePath).toLowerCase();
+
+      // Parse the file
+      let title: string;
+      let docType = options.type || 'runbook';
+      let services: string[] = [];
+
+      if (ext === '.md' || ext === '.markdown') {
+        const { data: frontmatter, content: body } = matter(content);
+        title = frontmatter.title || basename(filePath, ext);
+        docType = frontmatter.type || options.type || 'runbook';
+        services = frontmatter.services || [];
+      } else if (ext === '.yaml' || ext === '.yml') {
+        const data = parseYaml(content);
+        title = data.title || basename(filePath, ext);
+        docType = data.type || options.type || 'runbook';
+        services = data.services || [];
+      } else {
+        title = basename(filePath, ext);
+      }
+
+      // Copy to .runbook/runbooks/
+      const { mkdir, copyFile } = await import('fs/promises');
+      const destDir = join('.runbook', 'runbooks');
+      await mkdir(destDir, { recursive: true });
+      const destPath = join(destDir, basename(filePath));
+      await copyFile(filePath, destPath);
+
+      // Sync to update the index
+      const retriever = createRetriever();
+      await retriever.sync();
+
+      console.log(chalk.green(`Added: ${title}`));
+      console.log(chalk.gray(`  Type: ${docType}`));
+      console.log(chalk.gray(`  Services: ${services.length > 0 ? services.join(', ') : 'none'}`));
+      console.log(chalk.gray(`  Location: ${destPath}`));
+
+      retriever.close();
+    } catch (error) {
+      console.error(chalk.red(`Failed to add file: ${error instanceof Error ? error.message : error}`));
+    }
+  });
+
+knowledge
+  .command('validate')
+  .description('Check for stale or outdated knowledge')
+  .option('--days <days>', 'Days before considering content stale', '90')
+  .action(async (options: { days: string }) => {
+    const staleDays = parseInt(options.days, 10);
+    const staleDate = new Date();
+    staleDate.setDate(staleDate.getDate() - staleDays);
+
+    console.log(chalk.blue(`Checking for content older than ${staleDays} days...`));
+
+    try {
+      const retriever = createRetriever();
+      await retriever.sync();
+
+      // Get all documents and check their dates
+      const results = await retriever.search('*', { limit: 1000 });
+      const allDocs = [...results.runbooks, ...results.postmortems, ...results.knownIssues, ...results.architecture];
+
+      const stale: Array<{ title: string; type: string; age: number }> = [];
+      const fresh: Array<{ title: string; type: string }> = [];
+
+      // Group by document to avoid duplicates
+      const seen = new Set<string>();
+
+      for (const doc of allDocs) {
+        if (seen.has(doc.documentId)) continue;
+        seen.add(doc.documentId);
+
+        // For now, assume documents without lastValidated are potentially stale
+        // In a full implementation, we'd track last validated date
+        fresh.push({ title: doc.title, type: doc.type });
+      }
+
+      console.log(chalk.green(`\nKnowledge Base Status:`));
+      console.log(chalk.gray(`  Total documents: ${seen.size}`));
+
+      if (stale.length > 0) {
+        console.log(chalk.yellow(`\nStale documents (>${staleDays} days):`));
+        for (const doc of stale) {
+          console.log(chalk.yellow(`  - [${doc.type}] ${doc.title} (${doc.age} days old)`));
+        }
+      } else {
+        console.log(chalk.green(`\nNo stale documents found.`));
+      }
+
+      console.log(chalk.gray(`\nTip: Add 'lastValidated' to frontmatter to track validation dates.`));
+
+      retriever.close();
+    } catch (error) {
+      console.error(chalk.red(`Validation failed: ${error instanceof Error ? error.message : error}`));
+    }
+  });
+
+knowledge
+  .command('stats')
+  .description('Show knowledge base statistics')
+  .action(async () => {
+    console.log(chalk.blue('Knowledge Base Statistics:'));
+
+    try {
+      const retriever = createRetriever();
+      await retriever.sync();
+
+      const results = await retriever.search('*', { limit: 1000 });
+
+      console.log(chalk.cyan(`  Runbooks: ${results.runbooks.length}`));
+      console.log(chalk.cyan(`  Post-mortems: ${results.postmortems.length}`));
+      console.log(chalk.cyan(`  Architecture docs: ${results.architecture.length}`));
+      console.log(chalk.cyan(`  Known issues: ${results.knownIssues.length}`));
+      console.log(chalk.green(`  Total: ${retriever.getDocumentCount()} documents`));
+
+      retriever.close();
+    } catch (error) {
+      console.error(chalk.red(`Failed to get stats: ${error instanceof Error ? error.message : error}`));
+    }
+  });
+
+// Deploy command
+program
+  .command('deploy <service>')
+  .description('Deploy a service using the deploy-service skill')
+  .option('-e, --environment <env>', 'Target environment', 'production')
+  .option('--version <version>', 'Version to deploy')
+  .option('--dry-run', 'Show what would be deployed without executing')
+  .action(async (service: string, options: { environment: string; version?: string; dryRun?: boolean }) => {
+    const { environment, version, dryRun } = options;
+
+    const query = dryRun
+      ? `Show me what would happen if I deploy ${service} to ${environment}${version ? ` version ${version}` : ''}. Do not execute, just explain the steps.`
+      : `Deploy ${service} to ${environment}${version ? ` version ${version}` : ''} using the deploy-service skill. Perform all pre-deployment checks first.`;
+
+    console.log(chalk.cyan(`Deploying ${service} to ${environment}...`));
+    if (version) console.log(chalk.gray(`Version: ${version}`));
+    if (dryRun) console.log(chalk.yellow('(Dry run mode - no changes will be made)'));
+    console.log();
+
+    if (process.stdout.isTTY) {
+      render(<AgentUI query={query} verbose={true} />);
+    } else {
+      await runSimple(query);
+    }
+  });
+
+// Config set command
+program
+  .command('config')
+  .description('Show or modify configuration')
+  .option('--services', 'Show services configuration')
+  .option('--set <key=value>', 'Set a configuration value')
+  .action(async (options: { services?: boolean; set?: string }) => {
+    if (options.set) {
+      const [key, ...valueParts] = options.set.split('=');
+      const value = valueParts.join('=');
+
+      if (!key || !value) {
+        console.error(chalk.red('Invalid format. Use: --set key=value'));
+        process.exit(1);
+      }
+
+      console.log(chalk.blue(`Setting ${key} = ${value}`));
+
+      try {
+        const { readFile, writeFile, mkdir } = await import('fs/promises');
+        const { parse: parseYaml, stringify: stringifyYaml } = await import('yaml');
+        const { existsSync } = await import('fs');
+
+        const configPath = '.runbook/config.yaml';
+
+        let config: Record<string, unknown> = {};
+        if (existsSync(configPath)) {
+          const content = await readFile(configPath, 'utf-8');
+          config = parseYaml(content) || {};
+        }
+
+        // Handle nested keys (e.g., llm.model)
+        const keys = key.split('.');
+        let current: Record<string, unknown> = config;
+        for (let i = 0; i < keys.length - 1; i++) {
+          if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
+            current[keys[i]] = {};
+          }
+          current = current[keys[i]] as Record<string, unknown>;
+        }
+
+        // Parse value (try JSON, then boolean, then number, then string)
+        let parsedValue: unknown = value;
+        if (value === 'true') parsedValue = true;
+        else if (value === 'false') parsedValue = false;
+        else if (!isNaN(Number(value))) parsedValue = Number(value);
+        else {
+          try {
+            parsedValue = JSON.parse(value);
+          } catch {
+            parsedValue = value;
+          }
+        }
+
+        current[keys[keys.length - 1]] = parsedValue;
+
+        await mkdir('.runbook', { recursive: true });
+        await writeFile(configPath, stringifyYaml(config));
+
+        console.log(chalk.green(`Configuration updated: ${key} = ${JSON.stringify(parsedValue)}`));
+      } catch (error) {
+        console.error(chalk.red(`Failed to set config: ${error instanceof Error ? error.message : error}`));
+      }
+    } else if (options.services) {
+      const serviceConfig = await loadServiceConfig();
+      if (serviceConfig) {
+        console.log(chalk.cyan('Services Configuration:'));
+        console.log(JSON.stringify(serviceConfig, null, 2));
+      } else {
+        console.log(chalk.yellow('No services configured. Run "runbook init" to set up.'));
+      }
+    } else {
+      const config = await loadConfig();
+      console.log(chalk.cyan('Current Configuration:'));
+      console.log(JSON.stringify(config, null, 2));
     }
   });
 

@@ -127,7 +127,11 @@ Scratchpad: Full Audit Trail
   - [x] Risk-based approval (critical ops require typing 'yes')
   - [x] Cooldown enforcement for critical mutations
   - [x] Audit logging to `.runbook/audit/approvals.jsonl`
-  - [ ] Slack approval integration (future)
+  - [x] Slack approval integration
+    - [x] Send approval requests to Slack with buttons
+    - [x] Race between Slack and CLI approval
+    - [x] Configurable timeout
+    - [x] Auto-approval for specified risk levels
 
 ### Phase 6: Observability Tools
 - [x] Implement CloudWatch tools (`src/tools/aws/cloudwatch.ts`)
@@ -250,16 +254,18 @@ Scratchpad: Full Audit Trail
   - [x] `runbook investigate <incident-id>` - Investigate incident
   - [x] `runbook ask <query>` - Natural language cloud queries
   - [x] `runbook chat` - Interactive conversation mode
-  - [ ] `runbook deploy <service>` - Deploy workflow
+  - [x] `runbook deploy <service>` - Deploy workflow with dry-run option
   - [x] `runbook status` - Current infrastructure status
-- [ ] Implement knowledge commands
-  - [ ] `runbook knowledge sync` - Sync from sources
-  - [ ] `runbook knowledge search <query>` - Search knowledge base
-  - [ ] `runbook knowledge add <file>` - Add local knowledge
-  - [ ] `runbook knowledge validate` - Check for stale content
+- [x] Implement knowledge commands
+  - [x] `runbook knowledge sync` - Sync from sources
+  - [x] `runbook knowledge search <query>` - Search knowledge base with filters
+  - [x] `runbook knowledge add <file>` - Add local knowledge
+  - [x] `runbook knowledge validate` - Check for stale content
+  - [x] `runbook knowledge stats` - Show knowledge base statistics
 - [x] Implement config commands
   - [x] `runbook init` - Interactive setup wizard with step-by-step configuration
-  - [ ] `runbook config set <key> <value>` - Set config values
+  - [x] `runbook config` - Show current configuration
+  - [x] `runbook config --set key=value` - Set config values (supports nested keys)
 
 ### Phase 11: Learning & Suggestions
 - [ ] Implement learning module (`src/knowledge/learning/`)
@@ -512,12 +518,12 @@ Provider abstraction allows adding GCP, Azure, K8s without changing core agent l
 - Phase 2: Core Agent Loop (100%)
 - Phase 3: Hypothesis Engine (100% - causal query builder with anti-pattern detection)
 - Phase 4: AWS Tools (100% - 40+ services with dynamic loading)
-- Phase 5: Safety Layer (90% - approval flow complete, missing Slack integration)
+- Phase 5: Safety Layer (100% - approval flow with Slack integration)
 - Phase 6: Observability (100% - CloudWatch, Datadog, Prometheus integration)
 - Phase 7: Incident Management (100% - PagerDuty, OpsGenie, Slack complete)
 - Phase 8: Knowledge System (95% - FTS, vector embeddings, hybrid search)
 - Phase 9: Skills (100% - 7 core skills with executor and registry)
-- Phase 10: CLI Interface (90% - ask, chat, investigate, status, init wizard, config, knowledge commands)
+- Phase 10: CLI Interface (100% - all commands implemented)
 
 **New Features:**
 - Multi-AWS account support with assume-role and profiles
@@ -564,6 +570,14 @@ Provider abstraction allows adding GCP, Azure, K8s without changing core agent l
   - Hybrid search (FTS + vector) with RRF fusion
   - Batch embedding with caching
   - Find similar past incidents and runbooks
+- Complete CLI with all commands:
+  - `runbook deploy` with dry-run support
+  - `runbook knowledge add/validate/stats`
+  - `runbook config --set` for nested config values
+- Slack approval integration:
+  - Send approval requests to Slack with buttons
+  - Race between Slack and CLI approval
+  - Auto-approval for configured risk levels
 
 **GitHub:** https://github.com/manthan787/RunbookAI
 

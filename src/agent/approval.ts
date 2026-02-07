@@ -3,11 +3,17 @@
  *
  * Handles user confirmation for state-changing operations (mutations).
  * Provides CLI prompts for approval and maintains an audit trail.
+ * Supports Slack integration for remote approval.
  */
 
 import { createInterface } from 'readline';
 import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import {
+  isSlackConfigured,
+  requestSlackApproval as sendSlackApproval,
+  getConfiguredDefaultChannel,
+} from '../tools/incident/slack';
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
@@ -202,28 +208,6 @@ function prompt(question: string): Promise<string> {
   });
 }
 
-/**
- * Log approval to audit file
- */
-async function logApproval(request: MutationRequest, approved: boolean): Promise<void> {
-  const auditDir = join(process.cwd(), '.runbook', 'audit');
-  const auditFile = join(auditDir, 'approvals.jsonl');
-
-  if (!existsSync(auditDir)) {
-    mkdirSync(auditDir, { recursive: true });
-  }
-
-  const entry: ApprovalAuditEntry = {
-    timestamp: new Date().toISOString(),
-    mutationId: request.id,
-    operation: request.operation,
-    resource: request.resource,
-    riskLevel: request.riskLevel,
-    approved,
-  };
-
-  appendFileSync(auditFile, JSON.stringify(entry) + '\n');
-}
 
 /**
  * Check if auto-approval is allowed for an operation
@@ -273,4 +257,212 @@ export function generateMutationId(): string {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).substring(2, 8);
   return `mut_${timestamp}_${random}`;
+}
+
+/**
+ * Approval options
+ */
+export interface ApprovalOptions {
+  /** Use Slack for approval instead of CLI */
+  useSlack?: boolean;
+  /** Slack channel for approval (defaults to configured channel) */
+  slackChannel?: string;
+  /** Timeout for Slack approval in milliseconds (default: 5 minutes) */
+  slackTimeout?: number;
+  /** Auto-approve for certain risk levels */
+  autoApprove?: RiskLevel[];
+}
+
+/**
+ * Request approval with optional Slack integration
+ */
+export async function requestApprovalWithOptions(
+  request: MutationRequest,
+  options: ApprovalOptions = {}
+): Promise<ApprovalResult> {
+  // Check if auto-approval is allowed
+  if (options.autoApprove && options.autoApprove.includes(request.riskLevel)) {
+    await logApproval(request, true, 'auto-approved');
+    return {
+      approved: true,
+      approvedAt: new Date(),
+      approvedBy: 'auto-approval',
+      reason: 'Auto-approved based on risk level',
+    };
+  }
+
+  // Use Slack if configured and requested
+  if (options.useSlack && isSlackConfigured()) {
+    return requestSlackApproval(request, options.slackChannel, options.slackTimeout);
+  }
+
+  // Fall back to CLI
+  return requestApproval(request);
+}
+
+/**
+ * Request approval via Slack
+ *
+ * Note: This sends a message with approval buttons. For full button interaction,
+ * a webhook server is needed to handle the button clicks. This implementation
+ * polls for a response file as a simple workaround.
+ */
+async function requestSlackApproval(
+  request: MutationRequest,
+  channel?: string,
+  timeout: number = 300000 // 5 minutes default
+): Promise<ApprovalResult> {
+  const slackChannel = channel || getConfiguredDefaultChannel();
+
+  if (!slackChannel) {
+    console.log('\x1b[33mNo Slack channel configured. Falling back to CLI approval.\x1b[0m');
+    return requestApproval(request);
+  }
+
+  try {
+    // Send approval request to Slack
+    const message = await sendSlackApproval(slackChannel, {
+      id: request.id,
+      operation: request.operation,
+      resource: request.resource,
+      description: request.description,
+      riskLevel: request.riskLevel,
+      estimatedImpact: request.estimatedImpact,
+      rollbackCommand: request.rollbackCommand,
+    });
+
+    console.log(`\n\x1b[36m📱 Approval request sent to Slack channel ${slackChannel}\x1b[0m`);
+    console.log(`\x1b[36m   Message: ${message.ts}\x1b[0m`);
+    console.log(`\x1b[33m   Waiting for approval... (timeout: ${timeout / 1000}s)\x1b[0m`);
+    console.log(`\x1b[33m   Or press Enter to approve via CLI\x1b[0m\n`);
+
+    // Create a race between Slack approval and CLI input
+    const result = await Promise.race([
+      waitForSlackApproval(request.id, timeout),
+      waitForCLIApproval(request),
+    ]);
+
+    await logApproval(request, result.approved, result.approvedBy);
+    return result;
+  } catch (error) {
+    console.log(`\x1b[31mSlack approval failed: ${error instanceof Error ? error.message : error}\x1b[0m`);
+    console.log('\x1b[33mFalling back to CLI approval.\x1b[0m');
+    return requestApproval(request);
+  }
+}
+
+/**
+ * Wait for Slack approval response
+ *
+ * In a full implementation, this would listen for webhook events.
+ * For now, it checks a response file that could be written by a webhook handler.
+ */
+async function waitForSlackApproval(
+  mutationId: string,
+  timeout: number
+): Promise<ApprovalResult> {
+  const responseFile = join(process.cwd(), '.runbook', 'pending', `${mutationId}.json`);
+  const startTime = Date.now();
+  const pollInterval = 2000; // Check every 2 seconds
+
+  // Ensure directory exists
+  const pendingDir = join(process.cwd(), '.runbook', 'pending');
+  if (!existsSync(pendingDir)) {
+    mkdirSync(pendingDir, { recursive: true });
+  }
+
+  // Write pending request
+  const { writeFileSync } = await import('fs');
+  writeFileSync(
+    responseFile.replace('.json', '_pending.json'),
+    JSON.stringify({ mutationId, createdAt: new Date().toISOString() })
+  );
+
+  while (Date.now() - startTime < timeout) {
+    if (existsSync(responseFile)) {
+      try {
+        const { readFileSync, unlinkSync } = await import('fs');
+        const response = JSON.parse(readFileSync(responseFile, 'utf-8'));
+        unlinkSync(responseFile); // Clean up
+
+        return {
+          approved: response.approved === true,
+          approvedAt: new Date(),
+          approvedBy: response.approvedBy || 'slack-user',
+          reason: response.reason,
+        };
+      } catch {
+        // Invalid file, continue waiting
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+  }
+
+  // Timeout - reject
+  return {
+    approved: false,
+    reason: 'Slack approval timed out',
+  };
+}
+
+/**
+ * Wait for CLI approval (as alternative to Slack)
+ */
+async function waitForCLIApproval(request: MutationRequest): Promise<ApprovalResult> {
+  const promptMessage = request.riskLevel === 'critical'
+    ? `Type 'yes' to approve: `
+    : `Press Enter to approve, or 'n' to reject: `;
+
+  const response = await prompt(promptMessage);
+  const normalizedResponse = response.toLowerCase().trim();
+
+  let approved = false;
+  if (request.riskLevel === 'critical') {
+    approved = normalizedResponse === 'yes';
+  } else {
+    approved = normalizedResponse !== 'n' && normalizedResponse !== 'no';
+  }
+
+  return {
+    approved,
+    approvedAt: approved ? new Date() : undefined,
+    approvedBy: 'cli-user',
+    reason: approved ? 'Approved via CLI' : 'Rejected via CLI',
+  };
+}
+
+/**
+ * Log approval to audit file
+ */
+async function logApproval(
+  request: MutationRequest,
+  approved: boolean,
+  approvedBy?: string
+): Promise<void> {
+  const auditDir = join(process.cwd(), '.runbook', 'audit');
+  const auditFile = join(auditDir, 'approvals.jsonl');
+
+  if (!existsSync(auditDir)) {
+    mkdirSync(auditDir, { recursive: true });
+  }
+
+  const entry: ApprovalAuditEntry & { approvedBy?: string } = {
+    timestamp: new Date().toISOString(),
+    mutationId: request.id,
+    operation: request.operation,
+    resource: request.resource,
+    riskLevel: request.riskLevel,
+    approved,
+    approvedBy,
+  };
+
+  appendFileSync(auditFile, JSON.stringify(entry) + '\n');
+}
+
+/**
+ * Check if Slack approval is available
+ */
+export function isSlackApprovalAvailable(): boolean {
+  return isSlackConfigured() && !!getConfiguredDefaultChannel();
 }
