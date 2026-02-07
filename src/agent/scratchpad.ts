@@ -48,7 +48,7 @@ export class Scratchpad {
   /**
    * Append an entry to the scratchpad
    */
-  async append(entry: Omit<ScratchpadEntry, 'timestamp'>): Promise<void> {
+  async append(entry: Record<string, unknown> & { type: string }): Promise<void> {
     await this.init();
 
     const fullEntry = {
