@@ -6,6 +6,9 @@
  */
 
 import type { Tool } from '../agent/types';
+import { describeInstances } from './aws/ec2';
+import { listClusters, getAllServicesWithStatus } from './aws/ecs';
+import { listFunctions } from './aws/lambda';
 
 export interface ToolCategory {
   name: string;
@@ -126,7 +129,7 @@ export const awsQueryTool = defineTool(
    - "What EC2 instances are running?"
    - "Show me the ECS services in prod"
    - "What's the status of the checkout-api Lambda?"
-   - "Get CloudWatch metrics for RDS connections"
+   - "List all Lambda functions"
 
    Do NOT use for mutations - use aws_mutate instead.`,
   {
@@ -136,16 +139,69 @@ export const awsQueryTool = defineTool(
         type: 'string',
         description: 'Natural language query about AWS infrastructure',
       },
+      resource_type: {
+        type: 'string',
+        description: 'Type of resource to query: ec2, ecs, lambda, rds, elasticache',
+        enum: ['ec2', 'ecs', 'lambda', 'rds', 'elasticache', 'all'],
+      },
       region: {
         type: 'string',
-        description: 'AWS region (defaults to configured default)',
+        description: 'AWS region (defaults to us-east-1)',
       },
     },
     required: ['query'],
   },
   async (args) => {
-    // Placeholder - will be implemented with actual AWS SDK calls
-    return { message: 'AWS query tool not yet implemented', args };
+    const region = args.region as string | undefined;
+    const resourceType = (args.resource_type as string) || 'all';
+    const results: Record<string, unknown> = {};
+
+    try {
+      // Route based on resource type or query all
+      if (resourceType === 'ec2' || resourceType === 'all') {
+        const instances = await describeInstances(undefined, region);
+        results.ec2_instances = instances.map((i) => ({
+          id: i.instanceId,
+          name: i.name,
+          type: i.instanceType,
+          state: i.state,
+          privateIp: i.privateIp,
+          publicIp: i.publicIp,
+        }));
+      }
+
+      if (resourceType === 'ecs' || resourceType === 'all') {
+        const clusters = await listClusters(region);
+        const services = await getAllServicesWithStatus(region);
+        results.ecs_clusters = clusters;
+        results.ecs_services = services.map((s) => ({
+          name: s.serviceName,
+          cluster: s.clusterArn.split('/').pop(),
+          status: s.status,
+          running: s.runningCount,
+          desired: s.desiredCount,
+          pending: s.pendingCount,
+        }));
+      }
+
+      if (resourceType === 'lambda' || resourceType === 'all') {
+        const functions = await listFunctions(region);
+        results.lambda_functions = functions.map((f) => ({
+          name: f.functionName,
+          runtime: f.runtime,
+          memory: f.memorySize,
+          timeout: f.timeout,
+          state: f.state,
+        }));
+      }
+
+      return results;
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Unknown error querying AWS',
+        hint: 'Make sure AWS credentials are configured (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, or AWS profile)',
+      };
+    }
   }
 );
 
