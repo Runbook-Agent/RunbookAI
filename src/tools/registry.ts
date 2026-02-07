@@ -9,6 +9,10 @@ import type { Tool } from '../agent/types';
 import { describeInstances } from './aws/ec2';
 import { listClusters, getAllServicesWithStatus } from './aws/ecs';
 import { listFunctions } from './aws/lambda';
+import { describeDBInstances, describeDBClusters } from './aws/rds';
+import { getActiveAlarms, filterLogEvents, listLogGroups } from './aws/cloudwatch';
+import { getIncident, getIncidentAlerts, listIncidents, addIncidentNote } from './incident/pagerduty';
+import { createRetriever } from '../knowledge/retriever';
 
 export interface ToolCategory {
   name: string;
@@ -195,6 +199,26 @@ export const awsQueryTool = defineTool(
         }));
       }
 
+      if (resourceType === 'rds' || resourceType === 'all') {
+        const [instances, clusters] = await Promise.all([
+          describeDBInstances(undefined, region),
+          describeDBClusters(undefined, region),
+        ]);
+        results.rds_instances = instances.map((db) => ({
+          id: db.dbInstanceIdentifier,
+          class: db.dbInstanceClass,
+          engine: `${db.engine} ${db.engineVersion}`,
+          status: db.dbInstanceStatus,
+          multiAZ: db.multiAZ,
+        }));
+        results.rds_clusters = clusters.map((c) => ({
+          id: c.dbClusterIdentifier,
+          engine: `${c.engine} ${c.engineVersion}`,
+          status: c.status,
+          members: c.members,
+        }));
+      }
+
       return results;
     } catch (error) {
       return {
@@ -247,6 +271,16 @@ export const awsMutateTool = defineTool(
   }
 );
 
+// Global retriever instance
+let retriever: ReturnType<typeof createRetriever> | null = null;
+
+function getRetriever() {
+  if (!retriever) {
+    retriever = createRetriever();
+  }
+  return retriever;
+}
+
 /**
  * Knowledge Search Tool
  */
@@ -284,8 +318,124 @@ export const searchKnowledgeTool = defineTool(
     required: ['query'],
   },
   async (args) => {
-    // Placeholder - will be implemented with knowledge system
-    return { message: 'Knowledge search not yet implemented', args };
+    try {
+      const r = getRetriever();
+      const results = await r.search(args.query as string, {
+        typeFilter: args.type_filter as Array<'runbook' | 'postmortem' | 'architecture' | 'known_issue'> | undefined,
+        serviceFilter: args.service_filter as string[] | undefined,
+        limit: 5,
+      });
+
+      const total =
+        results.runbooks.length +
+        results.postmortems.length +
+        results.architecture.length +
+        results.knownIssues.length;
+
+      if (total === 0) {
+        return { message: 'No matching documents found', documentCount: 0 };
+      }
+
+      return {
+        documentCount: total,
+        runbooks: results.runbooks.map((r) => ({ title: r.title, content: r.content })),
+        postmortems: results.postmortems.map((r) => ({ title: r.title, content: r.content })),
+        knownIssues: results.knownIssues.map((r) => ({ title: r.title, content: r.content })),
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * CloudWatch Alarms Tool
+ */
+export const cloudwatchAlarmsTool = defineTool(
+  'cloudwatch_alarms',
+  `Get CloudWatch alarms status. Use to check for active alerts or alarm history.`,
+  {
+    type: 'object',
+    properties: {
+      state: {
+        type: 'string',
+        description: 'Filter by alarm state',
+        enum: ['OK', 'ALARM', 'INSUFFICIENT_DATA', 'all'],
+      },
+      region: {
+        type: 'string',
+        description: 'AWS region',
+      },
+    },
+  },
+  async (args) => {
+    try {
+      const state = args.state as string;
+      const region = args.region as string | undefined;
+
+      if (state === 'all' || !state) {
+        const alarms = await getActiveAlarms(region);
+        return { alarms, count: alarms.length };
+      }
+
+      const alarms = await getActiveAlarms(region);
+      const filtered = alarms.filter((a) => a.stateValue === state);
+      return { alarms: filtered, count: filtered.length };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * CloudWatch Logs Tool
+ */
+export const cloudwatchLogsTool = defineTool(
+  'cloudwatch_logs',
+  `Search CloudWatch logs for errors or specific patterns.`,
+  {
+    type: 'object',
+    properties: {
+      log_group: {
+        type: 'string',
+        description: 'Log group name (e.g., /ecs/my-service)',
+      },
+      filter_pattern: {
+        type: 'string',
+        description: 'Filter pattern (e.g., ERROR, Exception, timeout)',
+      },
+      minutes_back: {
+        type: 'number',
+        description: 'How many minutes back to search (default: 15)',
+      },
+      region: {
+        type: 'string',
+        description: 'AWS region',
+      },
+    },
+    required: ['log_group'],
+  },
+  async (args) => {
+    try {
+      const logGroup = args.log_group as string;
+      const pattern = (args.filter_pattern as string) || 'ERROR';
+      const minutesBack = (args.minutes_back as number) || 15;
+      const region = args.region as string | undefined;
+
+      const endTime = new Date();
+      const startTime = new Date(endTime.getTime() - minutesBack * 60 * 1000);
+
+      const events = await filterLogEvents(logGroup, pattern, startTime, endTime, 50, region);
+      return {
+        events: events.map((e) => ({
+          timestamp: new Date(e.timestamp).toISOString(),
+          message: e.message.slice(0, 500), // Truncate long messages
+        })),
+        count: events.length,
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
   }
 );
 
@@ -294,14 +444,7 @@ export const searchKnowledgeTool = defineTool(
  */
 export const pagerdutyGetIncidentTool = defineTool(
   'pagerduty_get_incident',
-  `Fetch details about a PagerDuty incident.
-
-   Returns:
-   - Incident status and urgency
-   - Triggered alerts
-   - Assigned responders
-   - Service information
-   - Timeline of events`,
+  `Fetch details about a PagerDuty incident including status, assignees, and alerts.`,
   {
     type: 'object',
     properties: {
@@ -313,39 +456,85 @@ export const pagerdutyGetIncidentTool = defineTool(
     required: ['incident_id'],
   },
   async (args) => {
-    // Placeholder - will be implemented with PagerDuty API
-    return { message: 'PagerDuty integration not yet implemented', args };
+    try {
+      const incidentId = args.incident_id as string;
+      const [incident, alerts] = await Promise.all([
+        getIncident(incidentId),
+        getIncidentAlerts(incidentId),
+      ]);
+
+      return {
+        incident: {
+          id: incident.id,
+          number: incident.incidentNumber,
+          title: incident.title,
+          status: incident.status,
+          urgency: incident.urgency,
+          service: incident.service.name,
+          createdAt: incident.createdAt,
+          assignees: incident.assignees.map((a) => a.name),
+        },
+        alerts: alerts.map((a) => ({
+          summary: a.summary,
+          severity: a.severity,
+          createdAt: a.createdAt,
+        })),
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
   }
 );
 
 /**
- * PagerDuty Add Note Tool
+ * PagerDuty List Incidents Tool
  */
-export const pagerdutyAddNoteTool = defineTool(
-  'pagerduty_add_note',
-  `Add an investigation note to a PagerDuty incident.
-
-   Use to:
-   - Document investigation progress
-   - Share findings with responders
-   - Record remediation steps taken`,
+export const pagerdutyListIncidentsTool = defineTool(
+  'pagerduty_list_incidents',
+  `List PagerDuty incidents, optionally filtered by status.`,
   {
     type: 'object',
     properties: {
-      incident_id: {
+      status: {
         type: 'string',
-        description: 'PagerDuty incident ID',
+        description: 'Filter by status',
+        enum: ['triggered', 'acknowledged', 'resolved', 'active'],
       },
-      note: {
-        type: 'string',
-        description: 'Note content (markdown supported)',
+      limit: {
+        type: 'number',
+        description: 'Max incidents to return (default: 10)',
       },
     },
-    required: ['incident_id', 'note'],
   },
   async (args) => {
-    // Placeholder
-    return { message: 'PagerDuty integration not yet implemented', args };
+    try {
+      const status = args.status as string | undefined;
+      const limit = (args.limit as number) || 10;
+
+      let statuses: Array<'triggered' | 'acknowledged' | 'resolved'> | undefined;
+      if (status === 'active') {
+        statuses = ['triggered', 'acknowledged'];
+      } else if (status) {
+        statuses = [status as 'triggered' | 'acknowledged' | 'resolved'];
+      }
+
+      const incidents = await listIncidents({ statuses, limit });
+
+      return {
+        incidents: incidents.map((i) => ({
+          id: i.id,
+          number: i.incidentNumber,
+          title: i.title,
+          status: i.status,
+          urgency: i.urgency,
+          service: i.service.name,
+          createdAt: i.createdAt,
+        })),
+        count: incidents.length,
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
   }
 );
 
@@ -385,6 +574,8 @@ export const skillTool = defineTool(
 toolRegistry.registerCategory('aws', 'AWS Cloud Operations', [
   awsQueryTool,
   awsMutateTool,
+  cloudwatchAlarmsTool,
+  cloudwatchLogsTool,
 ]);
 
 toolRegistry.registerCategory('knowledge', 'Knowledge Base', [
@@ -393,7 +584,7 @@ toolRegistry.registerCategory('knowledge', 'Knowledge Base', [
 
 toolRegistry.registerCategory('incident', 'Incident Management', [
   pagerdutyGetIncidentTool,
-  pagerdutyAddNoteTool,
+  pagerdutyListIncidentsTool,
 ]);
 
 toolRegistry.registerCategory('skills', 'Skill Invocation', [skillTool]);
