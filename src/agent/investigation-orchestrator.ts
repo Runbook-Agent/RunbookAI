@@ -1,0 +1,644 @@
+/**
+ * Investigation Orchestrator
+ *
+ * Orchestrates the full investigation lifecycle by coordinating:
+ * - State machine for phase transitions
+ * - LLM for hypothesis generation and evidence evaluation
+ * - Causal query builder for targeted queries
+ * - Log analyzer for pattern extraction
+ * - Tool execution for data gathering
+ */
+
+import {
+  InvestigationStateMachine,
+  createInvestigation,
+  type InvestigationPhase,
+  type InvestigationHypothesis,
+  type EvidenceEvaluation,
+  type TriageResult,
+  type Conclusion,
+  type RemediationPlan,
+  type RemediationStep,
+} from './state-machine';
+
+import {
+  parseHypothesisGeneration,
+  parseEvidenceEvaluation,
+  parseTriageResponse,
+  parseConclusion,
+  parseRemediationPlan,
+  parseLogAnalysis,
+  toTriageResult,
+  toHypothesisInput,
+  toEvidenceEvaluation,
+  toConclusionResult,
+  toRemediationSteps,
+  fillPrompt,
+  PROMPTS,
+  type HypothesisGeneration,
+} from './llm-parser';
+
+import {
+  analyzeLogs,
+  analyzePatterns,
+  type LogAnalysisResult,
+} from './log-analyzer';
+
+import {
+  generateQueriesForHypothesis,
+  generateQueryPlan,
+  prioritizeQueries,
+  isQueryTooBroad,
+  suggestQueryRefinements,
+  summarizeQueryResults,
+  type CausalQuery,
+  type QueryPlan,
+} from './causal-query';
+
+import type { Tool } from './types';
+
+/**
+ * LLM interface for generating structured outputs
+ */
+export interface LLMClient {
+  complete(prompt: string): Promise<string>;
+}
+
+/**
+ * Tool executor interface
+ */
+export interface ToolExecutor {
+  execute(toolName: string, parameters: Record<string, unknown>): Promise<unknown>;
+}
+
+/**
+ * Investigation options
+ */
+export interface InvestigationOptions {
+  incidentId?: string;
+  maxIterations?: number;
+  autoApproveRemediation?: boolean;
+  knownServices?: string[];
+  slackChannel?: string;
+}
+
+/**
+ * Investigation result
+ */
+export interface InvestigationResult {
+  id: string;
+  query: string;
+  rootCause?: string;
+  confidence?: 'high' | 'medium' | 'low';
+  remediationPlan?: RemediationPlan;
+  summary: string;
+  durationMs: number;
+}
+
+/**
+ * Event emitted during investigation
+ */
+export type InvestigationEvent =
+  | { type: 'phase_change'; phase: InvestigationPhase; reason: string }
+  | { type: 'triage_complete'; result: TriageResult }
+  | { type: 'hypothesis_created'; hypothesis: InvestigationHypothesis }
+  | { type: 'hypothesis_updated'; hypothesis: InvestigationHypothesis }
+  | { type: 'query_executing'; query: CausalQuery }
+  | { type: 'query_complete'; query: CausalQuery; result: unknown }
+  | { type: 'evidence_evaluated'; evaluation: EvidenceEvaluation }
+  | { type: 'conclusion_reached'; conclusion: Conclusion }
+  | { type: 'remediation_step'; step: RemediationStep; status: string }
+  | { type: 'error'; phase: InvestigationPhase; error: Error }
+  | { type: 'complete'; result: InvestigationResult };
+
+/**
+ * Event handler for investigation events
+ */
+export type InvestigationEventHandler = (event: InvestigationEvent) => void;
+
+/**
+ * Investigation Orchestrator
+ *
+ * Main class that orchestrates the investigation flow.
+ */
+export class InvestigationOrchestrator {
+  private readonly llm: LLMClient;
+  private readonly toolExecutor: ToolExecutor;
+  private readonly options: InvestigationOptions;
+  private readonly eventHandlers: InvestigationEventHandler[] = [];
+
+  constructor(
+    llm: LLMClient,
+    toolExecutor: ToolExecutor,
+    options: InvestigationOptions = {}
+  ) {
+    this.llm = llm;
+    this.toolExecutor = toolExecutor;
+    this.options = options;
+  }
+
+  /**
+   * Add event handler
+   */
+  on(handler: InvestigationEventHandler): () => void {
+    this.eventHandlers.push(handler);
+    return () => {
+      const index = this.eventHandlers.indexOf(handler);
+      if (index !== -1) {
+        this.eventHandlers.splice(index, 1);
+      }
+    };
+  }
+
+  /**
+   * Emit an event to all handlers
+   */
+  private emit(event: InvestigationEvent): void {
+    for (const handler of this.eventHandlers) {
+      try {
+        handler(event);
+      } catch (e) {
+        console.error('Event handler error:', e);
+      }
+    }
+  }
+
+  /**
+   * Run a full investigation
+   */
+  async investigate(query: string, context?: string): Promise<InvestigationResult> {
+    const startTime = Date.now();
+    const machine = createInvestigation(query, {
+      incidentId: this.options.incidentId,
+      maxIterations: this.options.maxIterations,
+    });
+
+    // Set up event forwarding from state machine
+    this.setupMachineEvents(machine);
+
+    try {
+      // Start the investigation
+      machine.start();
+
+      // Phase 1: Triage
+      await this.runTriage(machine, query, context);
+
+      // Phase 2-4: Hypothesis-Evidence Loop
+      while (machine.canContinue() && machine.getPhase() !== 'conclude') {
+        await this.runInvestigationCycle(machine);
+      }
+
+      // Phase 5: Conclusion
+      if (machine.getPhase() === 'conclude' || machine.getPhase() === 'evaluate') {
+        await this.runConclusion(machine);
+      }
+
+      // Phase 6: Remediation (if we have a conclusion)
+      if (machine.getState().conclusion && machine.getPhase() !== 'complete') {
+        await this.runRemediation(machine);
+      }
+
+      // Complete the investigation
+      if (machine.getPhase() !== 'complete') {
+        machine.transitionTo('complete', 'Investigation finished');
+      }
+
+      const result: InvestigationResult = {
+        id: machine.getState().id,
+        query,
+        rootCause: machine.getState().conclusion?.rootCause,
+        confidence: machine.getState().conclusion?.confidence,
+        remediationPlan: machine.getState().remediationPlan,
+        summary: machine.getSummary(),
+        durationMs: Date.now() - startTime,
+      };
+
+      this.emit({ type: 'complete', result });
+      return result;
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      machine.recordError(err);
+      this.emit({ type: 'error', phase: machine.getPhase(), error: err });
+      throw error;
+    }
+  }
+
+  /**
+   * Set up event forwarding from state machine
+   */
+  private setupMachineEvents(machine: InvestigationStateMachine): void {
+    machine.on('phaseChange', (transition) => {
+      this.emit({ type: 'phase_change', phase: transition.to, reason: transition.reason });
+    });
+
+    machine.on('hypothesisCreated', (hypothesis) => {
+      this.emit({ type: 'hypothesis_created', hypothesis });
+    });
+
+    machine.on('hypothesisUpdated', (hypothesis) => {
+      this.emit({ type: 'hypothesis_updated', hypothesis });
+    });
+
+    machine.on('evidenceEvaluated', (evaluation) => {
+      this.emit({ type: 'evidence_evaluated', evaluation });
+    });
+
+    machine.on('conclusionReached', (conclusion) => {
+      this.emit({ type: 'conclusion_reached', conclusion });
+    });
+
+    machine.on('stepCompleted', (step) => {
+      this.emit({ type: 'remediation_step', step, status: step.status });
+    });
+  }
+
+  /**
+   * Run the triage phase
+   */
+  private async runTriage(
+    machine: InvestigationStateMachine,
+    query: string,
+    context?: string
+  ): Promise<void> {
+    const triageContext = await this.gatherTriageContext(query, context);
+
+    const prompt = fillPrompt(PROMPTS.triage, {
+      context: triageContext,
+    });
+
+    const response = await this.llm.complete(prompt);
+    const triageResponse = parseTriageResponse(response);
+    const triageResult = toTriageResult(triageResponse, this.options.incidentId);
+
+    machine.setTriageResult(triageResult);
+    this.emit({ type: 'triage_complete', result: triageResult });
+
+    // Transition to hypothesize
+    machine.transitionTo('hypothesize', 'Triage complete');
+
+    // Generate initial hypotheses
+    await this.generateHypotheses(machine, triageResult);
+  }
+
+  /**
+   * Gather context for triage
+   */
+  private async gatherTriageContext(query: string, additionalContext?: string): Promise<string> {
+    const contextParts: string[] = [];
+
+    contextParts.push(`Query: ${query}`);
+
+    if (additionalContext) {
+      contextParts.push(`Additional Context: ${additionalContext}`);
+    }
+
+    // Try to gather some initial context from tools
+    try {
+      // Get recent alerts/alarms
+      const alarms = await this.toolExecutor.execute('cloudwatch_alarms', { state: 'ALARM' });
+      if (alarms) {
+        contextParts.push(`Active Alarms: ${JSON.stringify(alarms)}`);
+      }
+    } catch (e) {
+      // Ignore tool errors during triage
+    }
+
+    return contextParts.join('\n\n');
+  }
+
+  /**
+   * Generate hypotheses based on triage results
+   */
+  private async generateHypotheses(
+    machine: InvestigationStateMachine,
+    triage: TriageResult
+  ): Promise<void> {
+    const prompt = fillPrompt(PROMPTS.generateHypotheses, {
+      triageSummary: triage.summary,
+      symptoms: triage.symptoms.join('\n- ') || 'None identified',
+      errorMessages: triage.errorMessages.join('\n- ') || 'None identified',
+      services: triage.affectedServices.join(', ') || 'Unknown',
+    });
+
+    const response = await this.llm.complete(prompt);
+    const hypothesisGen = parseHypothesisGeneration(response);
+
+    // Add each hypothesis to the state machine
+    for (const hypothesis of hypothesisGen.hypotheses) {
+      const input = toHypothesisInput(hypothesis);
+      machine.addHypothesis(input);
+    }
+  }
+
+  /**
+   * Run a single investigation cycle
+   */
+  private async runInvestigationCycle(machine: InvestigationStateMachine): Promise<void> {
+    const hypothesis = machine.getNextHypothesis();
+
+    if (!hypothesis) {
+      // No more hypotheses to investigate
+      machine.transitionTo('conclude', 'All hypotheses investigated');
+      return;
+    }
+
+    // Transition to investigate if needed
+    if (machine.getPhase() === 'hypothesize' || machine.getPhase() === 'evaluate') {
+      machine.transitionTo('investigate', `Investigating: ${hypothesis.statement}`);
+    }
+
+    // Set current hypothesis
+    machine.setCurrentHypothesis(hypothesis.id);
+
+    // Generate and execute queries
+    const queries = await this.executeQueriesForHypothesis(machine, hypothesis);
+
+    // Transition to evaluate
+    machine.transitionTo('evaluate', 'Evidence gathered');
+
+    // Evaluate evidence
+    await this.evaluateEvidence(machine, hypothesis, queries);
+
+    // Check if we should conclude
+    const confirmedHypothesis = machine.getState().hypotheses.find((h) => h.status === 'confirmed');
+    if (confirmedHypothesis) {
+      machine.transitionTo('conclude', 'Root cause confirmed');
+    }
+  }
+
+  /**
+   * Execute queries for a hypothesis
+   */
+  private async executeQueriesForHypothesis(
+    machine: InvestigationStateMachine,
+    hypothesis: InvestigationHypothesis
+  ): Promise<Map<string, unknown>> {
+    const results = new Map<string, unknown>();
+
+    // Convert hypothesis to the format expected by causal query builder
+    const hypothesisForQuery = {
+      id: hypothesis.id,
+      parentId: hypothesis.parentId || null,
+      depth: 0,
+      statement: hypothesis.statement,
+      evidenceQuery: null,
+      evidenceStrength: hypothesis.evidenceStrength,
+      evidenceData: null,
+      reasoning: hypothesis.reasoning || null,
+      children: [],
+      status: hypothesis.status === 'pending' ? 'active' as const : hypothesis.status as 'active' | 'pruned' | 'confirmed',
+      createdAt: hypothesis.createdAt.toISOString(),
+    };
+
+    const queries = generateQueriesForHypothesis(hypothesisForQuery);
+
+    // Check for overly broad queries and refine
+    const refinedQueries = queries.map((q) => {
+      if (isQueryTooBroad(q)) {
+        return suggestQueryRefinements(q, {
+          service: machine.getState().triage?.affectedServices[0],
+          timeRange: 60, // Last hour
+        });
+      }
+      return q;
+    });
+
+    // Execute each query
+    for (const query of refinedQueries) {
+      this.emit({ type: 'query_executing', query });
+
+      try {
+        const result = await this.toolExecutor.execute(query.tool, query.parameters);
+        results.set(query.id, result);
+        machine.recordQueryResult(hypothesis.id, query.id, result);
+
+        this.emit({ type: 'query_complete', query, result });
+      } catch (error) {
+        results.set(query.id, { error: String(error) });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Evaluate evidence for a hypothesis
+   */
+  private async evaluateEvidence(
+    machine: InvestigationStateMachine,
+    hypothesis: InvestigationHypothesis,
+    queryResults: Map<string, unknown>
+  ): Promise<void> {
+    // Format evidence for LLM
+    const evidenceLines: string[] = [];
+    for (const [queryId, result] of queryResults) {
+      evidenceLines.push(`Query ${queryId}:\n${JSON.stringify(result, null, 2)}`);
+    }
+
+    const prompt = fillPrompt(PROMPTS.evaluateEvidence, {
+      hypothesis: hypothesis.statement,
+      confirmingEvidence: hypothesis.confirmingEvidence,
+      refutingEvidence: hypothesis.refutingEvidence,
+      evidence: evidenceLines.join('\n\n'),
+    });
+
+    const response = await this.llm.complete(prompt);
+    const evaluationInput = parseEvidenceEvaluation(response);
+
+    // Override hypothesis ID to match current hypothesis
+    evaluationInput.hypothesisId = hypothesis.id;
+
+    const evaluation = toEvidenceEvaluation(evaluationInput);
+    machine.applyEvaluation(evaluation);
+
+    // Handle branching - add sub-hypotheses if action is branch
+    if (evaluation.action === 'branch' && evaluationInput.subHypotheses) {
+      for (const subHypothesis of evaluationInput.subHypotheses) {
+        const input = toHypothesisInput(subHypothesis, hypothesis.id);
+        machine.addHypothesis(input);
+      }
+    }
+  }
+
+  /**
+   * Run the conclusion phase
+   */
+  private async runConclusion(machine: InvestigationStateMachine): Promise<void> {
+    // Transition to conclude if not already there
+    if (machine.getPhase() !== 'conclude') {
+      machine.transitionTo('conclude', 'Ready to conclude');
+    }
+
+    const confirmedHypothesis = machine.getState().hypotheses.find((h) => h.status === 'confirmed');
+    const allHypotheses = machine.getState().hypotheses;
+    const evaluations = machine.getState().evaluations;
+
+    // Format evidence chain from evaluations
+    const evidenceChain = evaluations
+      .filter((e) => e.evidenceStrength === 'strong' || e.evidenceStrength === 'weak')
+      .map((e) => ({
+        finding: e.findings.join(', '),
+        source: e.hypothesisId,
+        strength: e.evidenceStrength,
+      }));
+
+    const prompt = fillPrompt(PROMPTS.generateConclusion, {
+      hypothesis: confirmedHypothesis?.statement || allHypotheses[0]?.statement || 'Unknown',
+      evidence: JSON.stringify(evidenceChain, null, 2),
+      alternatives: allHypotheses
+        .filter((h) => h.status === 'pruned')
+        .map((h) => `- ${h.statement}: ${h.reasoning || 'No evidence'}`)
+        .join('\n') || 'None',
+    });
+
+    const response = await this.llm.complete(prompt);
+    const conclusionInput = parseConclusion(response);
+
+    // Use the actual confirmed hypothesis ID
+    if (confirmedHypothesis) {
+      conclusionInput.confirmedHypothesisId = confirmedHypothesis.id;
+    }
+
+    const conclusion = toConclusionResult(conclusionInput);
+    machine.setConclusion(conclusion);
+  }
+
+  /**
+   * Run the remediation phase
+   */
+  private async runRemediation(machine: InvestigationStateMachine): Promise<void> {
+    const conclusion = machine.getState().conclusion;
+    if (!conclusion) {
+      return;
+    }
+
+    // Transition to remediate
+    machine.transitionTo('remediate', 'Starting remediation planning');
+
+    const triage = machine.getState().triage;
+
+    const prompt = fillPrompt(PROMPTS.generateRemediation, {
+      rootCause: conclusion.rootCause,
+      services: triage?.affectedServices.join(', ') || 'Unknown',
+      skills: 'deploy-service, scale-service, rollback-deployment', // TODO: Get from skill registry
+      runbooks: 'None found', // TODO: Search knowledge base
+    });
+
+    const response = await this.llm.complete(prompt);
+    const planInput = parseRemediationPlan(response);
+    const steps = toRemediationSteps(planInput);
+
+    const plan: RemediationPlan = {
+      steps,
+      estimatedRecoveryTime: planInput.estimatedRecoveryTime,
+      monitoring: planInput.monitoring,
+    };
+
+    machine.setRemediationPlan(plan);
+
+    // Execute remediation steps if auto-approve is enabled
+    if (this.options.autoApproveRemediation) {
+      await this.executeRemediation(machine, plan);
+    }
+  }
+
+  /**
+   * Execute remediation steps
+   */
+  private async executeRemediation(
+    machine: InvestigationStateMachine,
+    plan: RemediationPlan
+  ): Promise<void> {
+    for (const step of plan.steps) {
+      if (step.requiresApproval && !this.options.autoApproveRemediation) {
+        machine.updateRemediationStep(step.id, { status: 'pending' });
+        continue;
+      }
+
+      machine.updateRemediationStep(step.id, { status: 'executing' });
+      this.emit({ type: 'remediation_step', step, status: 'executing' });
+
+      try {
+        if (step.command) {
+          // Execute the command through a bash tool or similar
+          const result = await this.toolExecutor.execute('execute_command', {
+            command: step.command,
+          });
+          machine.updateRemediationStep(step.id, {
+            status: 'completed',
+            result,
+          });
+        } else if (step.matchingSkill) {
+          // Execute through skill
+          const result = await this.toolExecutor.execute('invoke_skill', {
+            skill: step.matchingSkill,
+            action: step.action,
+          });
+          machine.updateRemediationStep(step.id, {
+            status: 'completed',
+            result,
+          });
+        } else {
+          // Mark as skipped if no execution method
+          machine.updateRemediationStep(step.id, {
+            status: 'skipped',
+            error: 'No execution method available',
+          });
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        machine.updateRemediationStep(step.id, {
+          status: 'failed',
+          error: errorMessage,
+        });
+      }
+    }
+  }
+
+  /**
+   * Analyze logs and incorporate findings
+   */
+  async analyzeLogsForHypothesis(
+    logs: string[],
+    hypothesis?: InvestigationHypothesis
+  ): Promise<LogAnalysisResult> {
+    const result = analyzeLogs(logs, this.options.knownServices);
+
+    // If we have an LLM, enhance with LLM analysis
+    try {
+      const timeRange = result.timeRange;
+      const prompt = fillPrompt(PROMPTS.analyzeLogs, {
+        logs: logs.slice(0, 100).join('\n'),
+        startTime: timeRange?.start.toISOString() || 'unknown',
+        endTime: timeRange?.end.toISOString() || 'unknown',
+      });
+
+      const response = await this.llm.complete(prompt);
+      const llmAnalysis = parseLogAnalysis(response);
+
+      // Merge LLM findings with pattern analysis
+      result.suggestedHypotheses = [
+        ...new Set([...result.suggestedHypotheses, ...llmAnalysis.suggestedHypotheses]),
+      ];
+
+      if (llmAnalysis.summary) {
+        result.summary = llmAnalysis.summary;
+      }
+    } catch (e) {
+      // Fall back to pattern-only analysis
+    }
+
+    return result;
+  }
+}
+
+/**
+ * Create an investigation orchestrator
+ */
+export function createOrchestrator(
+  llm: LLMClient,
+  toolExecutor: ToolExecutor,
+  options?: InvestigationOptions
+): InvestigationOrchestrator {
+  return new InvestigationOrchestrator(llm, toolExecutor, options);
+}

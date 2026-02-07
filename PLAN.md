@@ -209,12 +209,12 @@ Scratchpad: Full Audit Trail
   - [x] Combines FTS and vector search
   - [x] Reciprocal Rank Fusion (RRF) for merging
   - [x] Configurable weights for each approach
-- [ ] Implement service graph (`src/knowledge/store/graph-store.ts`)
-  - [ ] Service nodes and edges
-  - [ ] Dependency traversal
-  - [ ] Ownership lookup
-  - [ ] Service filtering
-  - [ ] Type boosting
+- [x] Implement service graph (`src/knowledge/store/graph-store.ts`)
+  - [x] Service nodes and edges
+  - [x] Dependency traversal (upstream/downstream impact)
+  - [x] Ownership lookup (by team, owner)
+  - [x] Service filtering (by type, tier, tag, team)
+  - [x] Path finding and cycle detection
 - [ ] Implement reranker (`src/knowledge/retriever/reranker.ts`)
   - [ ] LLM-based relevance scoring
   - [ ] Hypothesis-aware ranking
@@ -583,18 +583,56 @@ Provider abstraction allows adding GCP, Azure, K8s without changing core agent l
 
 **Next Steps:**
 
-### Priority 1: Agent Reasoning System (see docs/AGENT_DESIGN.md)
-1. Implement investigation state machine (triage → hypothesize → investigate → evaluate → conclude → remediate)
-2. Add structured output parsing for LLM hypothesis/evidence responses
-3. Integrate causal query builder into investigation loop
-4. Wire hypothesis engine lifecycle (create, update, prune, confirm)
-5. Add log analysis with pattern extraction and LLM summarization
-6. Implement conversation memory for chat mode
+### Priority 1: Agent Reasoning System (see docs/AGENT_DESIGN.md) - 100% Complete ✅
+Total: 156 tests passing across 5 test files
+
+1. ✅ Implement investigation state machine (triage → hypothesize → investigate → evaluate → conclude → remediate)
+   - `src/agent/state-machine.ts` with 8 phases, event emitter pattern
+   - `src/agent/__tests__/state-machine.test.ts` with 45 passing tests
+   - Hypothesis tree with max depth 4, max 10 hypotheses
+   - Evidence evaluation with branch/prune/confirm/continue actions
+
+2. ✅ Add structured output parsing for LLM hypothesis/evidence responses
+   - `src/agent/llm-parser.ts` with Zod schemas for all structured outputs
+   - `src/agent/__tests__/llm-parser.test.ts` with 27 passing tests
+   - Schemas: TriageResponse, HypothesisGeneration, EvidenceEvaluation, Conclusion, RemediationPlan, LogAnalysis
+   - Prompt templates for each structured output type
+
+3. ✅ Add log analysis with pattern extraction
+   - `src/agent/log-analyzer.ts` with pattern matching and log parsing
+   - `src/agent/__tests__/log-analyzer.test.ts` with 34 passing tests
+   - 11 error pattern categories (connection, memory, database, auth, K8s, etc.)
+   - Time range extraction, service mention detection, log filtering
+
+4. ✅ Integrate causal query builder into investigation loop
+   - `src/agent/investigation-orchestrator.ts` ties everything together
+   - `src/agent/__tests__/investigation-orchestrator.test.ts` with 16 passing tests
+   - Orchestrates: state machine, LLM parsing, log analysis, query execution
+   - Event emitter for progress tracking
+
+5. ✅ Wire hypothesis engine lifecycle (create, update, prune, confirm)
+   - Full lifecycle in orchestrator: generate → investigate → evaluate → branch/prune/confirm
+   - Automatic sub-hypothesis creation on branch
+   - Remediation planning from conclusion
+
+6. ✅ Implement conversation memory for chat mode
+   - `src/agent/conversation-memory.ts` with full memory management
+   - `src/agent/__tests__/conversation-memory.test.ts` with 34 passing tests
+   - Store conversation history and investigation context
+   - Context compression and summarization
+   - Reference previous findings
+   - Serialize/deserialize for persistence
 
 ### Priority 2: Infrastructure
-1. Add service dependency graph
-2. Implement Slack webhook server for approval buttons
-3. Add Kubernetes integration
+1. ✅ Add service dependency graph
+   - `src/knowledge/store/graph-store.ts` with full graph operations
+   - `src/knowledge/store/__tests__/graph-store.test.ts` with 31 passing tests
+   - Service nodes with type, team, tier, tags, and metadata
+   - Dependency edges with criticality and type
+   - Impact analysis (upstream and downstream)
+   - Path finding, cycle detection, and statistics
+2. 🔲 Implement Slack webhook server for approval buttons
+3. 🔲 Add Kubernetes integration
 
 **Usage:**
 ```bash

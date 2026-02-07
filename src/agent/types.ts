@@ -107,7 +107,7 @@ export interface DoneEvent {
 }
 
 // Evidence and confidence types
-export type EvidenceStrength = 'strong' | 'weak' | 'none' | 'pending';
+export type EvidenceStrength = 'strong' | 'weak' | 'none' | 'contradicting' | 'pending';
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 // Hypothesis tree types

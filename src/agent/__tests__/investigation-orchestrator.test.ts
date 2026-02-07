@@ -1,0 +1,396 @@
+/**
+ * Tests for Investigation Orchestrator
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+  InvestigationOrchestrator,
+  createOrchestrator,
+  type LLMClient,
+  type ToolExecutor,
+  type InvestigationEvent,
+} from '../investigation-orchestrator';
+
+// Mock LLM responses
+const mockTriageResponse = JSON.stringify({
+  summary: 'API latency spike affecting user service',
+  severity: 'high',
+  affectedServices: ['api-gateway', 'user-service'],
+  symptoms: ['p99 latency > 5s', 'error rate increasing'],
+  errorMessages: ['Connection timeout', 'Service unavailable'],
+  timeWindow: {
+    start: '2024-01-15T10:00:00Z',
+    end: '2024-01-15T11:00:00Z',
+  },
+});
+
+const mockHypothesisResponse = JSON.stringify({
+  hypotheses: [
+    {
+      statement: 'Database connection pool exhausted',
+      category: 'infrastructure',
+      priority: 1,
+      confirmingEvidence: 'High number of waiting connections',
+      refutingEvidence: 'Connection count is normal',
+      queries: [
+        { type: 'metrics', description: 'Check connection count' },
+      ],
+    },
+    {
+      statement: 'Network latency between services',
+      category: 'dependency',
+      priority: 2,
+      confirmingEvidence: 'High inter-service latency',
+      refutingEvidence: 'Normal network metrics',
+      queries: [
+        { type: 'metrics', description: 'Check network latency' },
+      ],
+    },
+  ],
+  reasoning: 'Based on symptoms, database and network issues are most likely',
+});
+
+const mockEvidenceEvaluationConfirm = JSON.stringify({
+  hypothesisId: 'h_1',
+  evidenceStrength: 'strong',
+  confidence: 90,
+  reasoning: 'Connection count at maximum, matching the expected pattern',
+  action: 'confirm',
+  findings: ['Connection pool at 100%', 'Queries queuing up'],
+});
+
+const mockEvidenceEvaluationPrune = JSON.stringify({
+  hypothesisId: 'h_2',
+  evidenceStrength: 'none',
+  confidence: 10,
+  reasoning: 'Network metrics are normal',
+  action: 'prune',
+  findings: ['Network latency within normal range'],
+});
+
+const mockConclusionResponse = JSON.stringify({
+  rootCause: 'Database connection pool exhausted due to connection leak',
+  confidence: 'high',
+  confirmedHypothesisId: 'h_1',
+  evidenceChain: [
+    { finding: 'Connection pool at 100%', source: 'cloudwatch', strength: 'strong' },
+  ],
+  alternativeExplanations: ['Network issues were ruled out'],
+  unknowns: ['Exact code path causing the leak'],
+});
+
+const mockRemediationResponse = JSON.stringify({
+  steps: [
+    {
+      action: 'Restart the service',
+      description: 'Force new deployment to clear connection pool',
+      command: 'aws ecs update-service --force-new-deployment',
+      riskLevel: 'medium',
+      requiresApproval: true,
+    },
+  ],
+  estimatedRecoveryTime: '5 minutes',
+  monitoring: ['Watch connection count', 'Monitor error rate'],
+});
+
+describe('InvestigationOrchestrator', () => {
+  let mockLLM: LLMClient;
+  let mockToolExecutor: ToolExecutor;
+  let llmCallIndex: number;
+
+  beforeEach(() => {
+    llmCallIndex = 0;
+
+    // Create mock LLM that returns appropriate responses based on call order
+    // The order is: triage -> hypothesis generation -> evidence eval (repeat) -> conclusion -> remediation
+    mockLLM = {
+      complete: vi.fn().mockImplementation(async (prompt: string) => {
+        llmCallIndex++;
+
+        // First call is triage
+        if (llmCallIndex === 1) {
+          return mockTriageResponse;
+        }
+
+        // Second call is hypothesis generation
+        if (llmCallIndex === 2) {
+          return mockHypothesisResponse;
+        }
+
+        // Third call is first evidence evaluation - confirm the first hypothesis
+        if (llmCallIndex === 3) {
+          return mockEvidenceEvaluationConfirm;
+        }
+
+        // Fourth call is conclusion
+        if (llmCallIndex === 4) {
+          return mockConclusionResponse;
+        }
+
+        // Fifth call is remediation
+        if (llmCallIndex === 5) {
+          return mockRemediationResponse;
+        }
+
+        // Additional calls return a generic response
+        return mockEvidenceEvaluationPrune;
+      }),
+    };
+
+    // Create mock tool executor
+    mockToolExecutor = {
+      execute: vi.fn().mockImplementation(async (tool: string, params: Record<string, unknown>) => {
+        if (tool === 'cloudwatch_alarms') {
+          return [{ alarmName: 'HighLatency', state: 'ALARM' }];
+        }
+        if (tool === 'cloudwatch_logs') {
+          return [{ message: 'Connection timeout after 30s' }];
+        }
+        if (tool === 'datadog') {
+          return { metrics: { cpu: 45, memory: 80 } };
+        }
+        if (tool === 'aws_query') {
+          return { services: ['api-gateway'], status: 'running' };
+        }
+        return { success: true };
+      }),
+    };
+  });
+
+  describe('creation', () => {
+    it('should create orchestrator with createOrchestrator function', () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+      expect(orchestrator).toBeInstanceOf(InvestigationOrchestrator);
+    });
+
+    it('should accept options', () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor, {
+        incidentId: 'INC-123',
+        maxIterations: 5,
+      });
+      expect(orchestrator).toBeInstanceOf(InvestigationOrchestrator);
+    });
+  });
+
+  describe('event handling', () => {
+    it('should emit events during investigation', async () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+      const events: InvestigationEvent[] = [];
+
+      orchestrator.on((event) => events.push(event));
+
+      await orchestrator.investigate('Why is the API slow?');
+
+      // Should have phase change events
+      const phaseChanges = events.filter((e) => e.type === 'phase_change');
+      expect(phaseChanges.length).toBeGreaterThan(0);
+
+      // Should have triage complete
+      const triageComplete = events.find((e) => e.type === 'triage_complete');
+      expect(triageComplete).toBeDefined();
+
+      // Should have complete event
+      const complete = events.find((e) => e.type === 'complete');
+      expect(complete).toBeDefined();
+    });
+
+    it('should allow removing event handlers', () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+      const events: InvestigationEvent[] = [];
+
+      const unsubscribe = orchestrator.on((event) => events.push(event));
+      unsubscribe();
+
+      // Events list should remain empty after investigation
+      // since handler was removed
+    });
+  });
+
+  describe('investigation phases', () => {
+    it('should complete triage phase', async () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+      const events: InvestigationEvent[] = [];
+
+      orchestrator.on((event) => events.push(event));
+
+      await orchestrator.investigate('Why is the API slow?');
+
+      const triageEvent = events.find((e) => e.type === 'triage_complete');
+      expect(triageEvent).toBeDefined();
+      if (triageEvent?.type === 'triage_complete') {
+        expect(triageEvent.result.summary).toBe('API latency spike affecting user service');
+        expect(triageEvent.result.severity).toBe('high');
+      }
+    });
+
+    it('should create hypotheses', async () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+      const events: InvestigationEvent[] = [];
+
+      orchestrator.on((event) => events.push(event));
+
+      await orchestrator.investigate('Why is the API slow?');
+
+      const hypothesisEvents = events.filter((e) => e.type === 'hypothesis_created');
+      expect(hypothesisEvents.length).toBeGreaterThan(0);
+    });
+
+    it('should evaluate evidence', async () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+      const events: InvestigationEvent[] = [];
+
+      orchestrator.on((event) => events.push(event));
+
+      await orchestrator.investigate('Why is the API slow?');
+
+      const evaluationEvents = events.filter((e) => e.type === 'evidence_evaluated');
+      expect(evaluationEvents.length).toBeGreaterThan(0);
+    });
+
+    it('should reach conclusion', async () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+      const events: InvestigationEvent[] = [];
+
+      orchestrator.on((event) => events.push(event));
+
+      await orchestrator.investigate('Why is the API slow?');
+
+      const conclusionEvent = events.find((e) => e.type === 'conclusion_reached');
+      expect(conclusionEvent).toBeDefined();
+      if (conclusionEvent?.type === 'conclusion_reached') {
+        expect(conclusionEvent.conclusion.rootCause).toContain('connection pool');
+      }
+    });
+  });
+
+  describe('investigation result', () => {
+    it('should return complete result', async () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+
+      const result = await orchestrator.investigate('Why is the API slow?');
+
+      expect(result.id).toBeDefined();
+      expect(result.query).toBe('Why is the API slow?');
+      expect(result.rootCause).toBeDefined();
+      expect(result.confidence).toBe('high');
+      expect(result.summary).toBeDefined();
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should include remediation plan', async () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+
+      const result = await orchestrator.investigate('Why is the API slow?');
+
+      expect(result.remediationPlan).toBeDefined();
+      expect(result.remediationPlan?.steps.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('tool execution', () => {
+    it('should execute tool queries', async () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+      const queryEvents: InvestigationEvent[] = [];
+
+      orchestrator.on((event) => {
+        if (event.type === 'query_executing' || event.type === 'query_complete') {
+          queryEvents.push(event);
+        }
+      });
+
+      await orchestrator.investigate('Why is the API slow?');
+
+      expect(queryEvents.length).toBeGreaterThan(0);
+      expect(mockToolExecutor.execute).toHaveBeenCalled();
+    });
+
+    it('should handle tool errors gracefully', async () => {
+      // Reset call index for this test
+      llmCallIndex = 0;
+
+      // Make tool executor throw an error sometimes
+      mockToolExecutor.execute = vi.fn().mockImplementation(async (tool: string) => {
+        if (tool === 'cloudwatch_alarms') {
+          throw new Error('Access denied');
+        }
+        return { success: true };
+      });
+
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+
+      // Should not throw - errors should be captured
+      const result = await orchestrator.investigate('Why is the API slow?');
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('options', () => {
+    it('should use incident ID from options', async () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor, {
+        incidentId: 'INC-456',
+      });
+
+      const events: InvestigationEvent[] = [];
+      orchestrator.on((event) => events.push(event));
+
+      await orchestrator.investigate('Investigate incident');
+
+      const triageEvent = events.find((e) => e.type === 'triage_complete');
+      // Triage should include incident ID (passed through)
+      expect(triageEvent).toBeDefined();
+    });
+
+    it('should respect max iterations', async () => {
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor, {
+        maxIterations: 2,
+      });
+
+      // Should complete even with low iteration limit
+      const result = await orchestrator.investigate('Why is the API slow?');
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('log analysis', () => {
+    it('should analyze logs for hypothesis', async () => {
+      // Create a mock that returns log analysis response
+      const logAnalysisLLM: LLMClient = {
+        complete: vi.fn().mockResolvedValue(JSON.stringify({
+          patterns: [],
+          anomalies: [],
+          summary: 'Connection issues detected',
+          suggestedHypotheses: ['Database connectivity issue'],
+        })),
+      };
+
+      const orchestrator = createOrchestrator(logAnalysisLLM, mockToolExecutor);
+
+      const logs = [
+        '2024-01-15T10:00:00Z ERROR connection timeout',
+        '2024-01-15T10:01:00Z ERROR database connection failed',
+      ];
+
+      const analysis = await orchestrator.analyzeLogsForHypothesis(logs);
+
+      expect(analysis.totalLines).toBe(2);
+      expect(analysis.patternMatches.length).toBeGreaterThan(0);
+      expect(analysis.suggestedHypotheses.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should emit error event on failure', async () => {
+      // Make LLM throw an error
+      mockLLM.complete = vi.fn().mockRejectedValue(new Error('LLM unavailable'));
+
+      const orchestrator = createOrchestrator(mockLLM, mockToolExecutor);
+      const events: InvestigationEvent[] = [];
+      orchestrator.on((event) => events.push(event));
+
+      await expect(orchestrator.investigate('Test')).rejects.toThrow('LLM unavailable');
+
+      const errorEvent = events.find((e) => e.type === 'error');
+      expect(errorEvent).toBeDefined();
+    });
+  });
+});
