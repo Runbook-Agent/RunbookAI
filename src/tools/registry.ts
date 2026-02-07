@@ -8,6 +8,15 @@
 import type { Tool } from '../agent/types';
 import { getActiveAlarms, filterLogEvents, listLogGroups } from './aws/cloudwatch';
 import { getIncident, getIncidentAlerts, listIncidents, addIncidentNote } from './incident/pagerduty';
+import {
+  queryMetrics,
+  searchLogs,
+  searchTraces,
+  getTriggeredMonitors,
+  getEvents,
+  getDatadogSummary,
+  isDatadogConfigured,
+} from './observability/datadog';
 import { createRetriever } from '../knowledge/retriever';
 import { AWS_SERVICES, getServiceById, getAllServiceIds, CATEGORY_DESCRIPTIONS } from '../providers/aws/services';
 import { executeListOperation, executeMultiServiceQuery, getInstalledServices } from '../providers/aws/executor';
@@ -782,12 +791,173 @@ export const skillTool = defineTool(
   }
 );
 
+/**
+ * Datadog Observability Tool
+ */
+export const datadogTool = defineTool(
+  'datadog',
+  `Query Datadog for metrics, logs, traces, and alerts.
+
+   Use for:
+   - "Show me triggered Datadog monitors"
+   - "Search Datadog logs for errors in checkout-service"
+   - "Get CPU metrics for the last hour"
+   - "Find slow traces in the API"
+
+   Requires DD_API_KEY and DD_APP_KEY environment variables or config.`,
+  {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        description: 'Action to perform',
+        enum: ['monitors', 'logs', 'metrics', 'traces', 'events', 'summary'],
+      },
+      query: {
+        type: 'string',
+        description: 'Search query (for logs, metrics, traces)',
+      },
+      service: {
+        type: 'string',
+        description: 'Filter by service name',
+      },
+      from_minutes: {
+        type: 'number',
+        description: 'How many minutes back to search (default: 60)',
+      },
+      limit: {
+        type: 'number',
+        description: 'Max results to return (default: 50)',
+      },
+    },
+    required: ['action'],
+  },
+  async (args) => {
+    const action = args.action as string;
+    const query = args.query as string | undefined;
+    const service = args.service as string | undefined;
+    const fromMinutes = (args.from_minutes as number) || 60;
+    const limit = (args.limit as number) || 50;
+
+    // Check if Datadog is configured
+    const configured = await isDatadogConfigured();
+    if (!configured) {
+      return {
+        error: 'Datadog not configured',
+        hint: 'Set DD_API_KEY and DD_APP_KEY environment variables, or configure in .runbook/services.yaml',
+      };
+    }
+
+    try {
+      switch (action) {
+        case 'summary': {
+          const summary = await getDatadogSummary();
+          return summary || { error: 'Failed to get Datadog summary' };
+        }
+
+        case 'monitors': {
+          const monitors = await getTriggeredMonitors();
+          return {
+            triggeredMonitors: monitors.map((m) => ({
+              id: m.id,
+              name: m.name,
+              state: m.overallState,
+              type: m.type,
+              priority: m.priority,
+            })),
+            count: monitors.length,
+          };
+        }
+
+        case 'logs': {
+          if (!query) {
+            return { error: 'Query is required for log search' };
+          }
+          const now = new Date();
+          const from = new Date(now.getTime() - fromMinutes * 60 * 1000);
+          const result = await searchLogs(query, {
+            from: from.toISOString(),
+            to: now.toISOString(),
+            limit,
+          });
+          return result || { error: 'Failed to search logs' };
+        }
+
+        case 'metrics': {
+          if (!query) {
+            return { error: 'Query is required for metrics (e.g., "avg:system.cpu.user{*}")' };
+          }
+          const result = await queryMetrics(query, fromMinutes * 60, 0);
+          if (!result) {
+            return { error: 'Failed to query metrics' };
+          }
+          return {
+            query: result.query,
+            series: result.series.map((s) => ({
+              metric: s.metric,
+              scope: s.scope,
+              points: s.pointlist.length,
+              lastValue: s.pointlist.length > 0 ? s.pointlist[s.pointlist.length - 1][1] : null,
+            })),
+          };
+        }
+
+        case 'traces': {
+          const result = await searchTraces(query || '*', {
+            from: Math.floor(Date.now() / 1000) - fromMinutes * 60,
+            limit,
+            service,
+          });
+          if (!result) {
+            return { error: 'Failed to search traces' };
+          }
+          return {
+            spans: result.spans.map((s) => ({
+              traceId: s.traceId,
+              service: s.service,
+              resource: s.resource,
+              duration: s.duration,
+              error: s.error,
+            })),
+            count: result.spans.length,
+          };
+        }
+
+        case 'events': {
+          const events = await getEvents({
+            start: Math.floor(Date.now() / 1000) - fromMinutes * 60,
+          });
+          return {
+            events: events.map((e) => ({
+              id: e.id,
+              title: e.title,
+              priority: e.priority,
+              alertType: e.alertType,
+              source: e.source,
+            })),
+            count: events.length,
+          };
+        }
+
+        default:
+          return { error: `Unknown action: ${action}` };
+      }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
 // Register default tools
 toolRegistry.registerCategory('aws', 'AWS Cloud Operations', [
   awsQueryTool,
   awsMutateTool,
   cloudwatchAlarmsTool,
   cloudwatchLogsTool,
+]);
+
+toolRegistry.registerCategory('observability', 'Observability & Monitoring', [
+  datadogTool,
 ]);
 
 toolRegistry.registerCategory('knowledge', 'Knowledge Base', [

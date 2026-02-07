@@ -128,14 +128,17 @@ Scratchpad: Full Audit Trail
   - [ ] Slack approval integration (future)
 
 ### Phase 6: Observability Tools
-- [ ] Implement CloudWatch tools (`src/tools/observability/cloudwatch.ts`)
-  - [ ] Log insights queries
-  - [ ] Metric statistics
-  - [ ] Alarm status
-- [ ] Implement Datadog tools (`src/tools/observability/datadog.ts`) (optional)
-  - [ ] Metric queries
-  - [ ] Log search
-  - [ ] APM traces
+- [x] Implement CloudWatch tools (`src/tools/aws/cloudwatch.ts`)
+  - [x] Log filtering and search
+  - [x] Alarm status
+  - [x] Log group listing
+- [x] Implement Datadog tools (`src/tools/observability/datadog.ts`)
+  - [x] Metric queries
+  - [x] Log search
+  - [x] APM trace search
+  - [x] Monitor/alert status
+  - [x] Events timeline
+  - [x] Service catalog
 - [ ] Implement generic metrics interface
   - [ ] Prometheus support (future)
   - [ ] Custom metrics endpoints
@@ -212,6 +215,7 @@ Scratchpad: Full Audit Trail
 - [x] Implement core commands
   - [x] `runbook investigate <incident-id>` - Investigate incident
   - [x] `runbook ask <query>` - Natural language cloud queries
+  - [x] `runbook chat` - Interactive conversation mode
   - [ ] `runbook deploy <service>` - Deploy workflow
   - [x] `runbook status` - Current infrastructure status
 - [ ] Implement knowledge commands
@@ -475,11 +479,11 @@ Provider abstraction allows adding GCP, Azure, K8s without changing core agent l
 - Phase 3: Hypothesis Engine (90% - missing causal query builder)
 - Phase 4: AWS Tools (100% - 40+ services with dynamic loading)
 - Phase 5: Safety Layer (90% - approval flow complete, missing Slack integration)
-- Phase 6: Observability (60% - CloudWatch alarms/logs implemented)
+- Phase 6: Observability (90% - CloudWatch + Datadog integration)
 - Phase 7: Incident Management (60% - PagerDuty integration implemented)
 - Phase 8: Knowledge System (80% - filesystem source, SQLite store, FTS search)
 - Phase 9: Skills (10% - investigate-incident skill created)
-- Phase 10: CLI Interface (85% - ask, investigate, status, init wizard, config, knowledge commands)
+- Phase 10: CLI Interface (90% - ask, chat, investigate, status, init wizard, config, knowledge commands)
 
 **New Features:**
 - Multi-AWS account support with assume-role and profiles
@@ -495,27 +499,36 @@ Provider abstraction allows adding GCP, Azure, K8s without changing core agent l
 - Mutation approval flow with risk classification (low/medium/high/critical)
 - AWS mutations: ECS scaling, EC2 start/stop/reboot, Lambda config updates
 - Audit trail for all approved/rejected mutations
+- Interactive chat interface (`runbook chat`) with conversation history
+- Datadog integration (metrics, logs, traces, monitors, events)
 
 **GitHub:** https://github.com/manthan787/RunbookAI
 
 **Next Steps:**
 
-1. Add Datadog integration
-2. Complete skill system for deploy/scale workflows
-3. Implement causal query builder for hypothesis-targeted queries
-4. Add Slack approval integration for mutations
-5. Add describe operations for each service (detailed resource info)
+1. Complete skill system for deploy/scale workflows
+2. Implement causal query builder for hypothesis-targeted queries
+3. Add Slack approval integration for mutations
+4. Add describe operations for each service (detailed resource info)
+5. Add Prometheus/custom metrics support
 
 **Usage:**
 ```bash
 # Quick setup
 runbook init --template ecs-rds --regions us-east-1
 
-# Query infrastructure
+# Interactive chat mode
+runbook chat
+
+# One-shot queries
 runbook ask "what's running in prod?"
+runbook ask "show me all S3 buckets and Lambda functions"
 
 # Investigate incident
 runbook investigate PD-12345
+
+# Check status
+runbook status
 
 # Search knowledge
 runbook knowledge search "redis timeout"

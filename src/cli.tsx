@@ -17,6 +17,7 @@ import { toolRegistry } from './tools/registry';
 import { loadConfig, validateConfig } from './utils/config';
 import { quickSetup, loadServiceConfig, ONBOARDING_PROMPTS } from './config/onboarding';
 import { SetupWizard } from './cli/setup-wizard';
+import { ChatInterface } from './cli/chat';
 import { createRetriever } from './knowledge/retriever';
 import type { AgentEvent } from './agent/types';
 
@@ -237,6 +238,20 @@ program
       render(<AgentUI query={query} verbose={options.verbose || false} />);
     } else {
       await runSimple(query);
+    }
+  });
+
+// Chat command - interactive conversation
+program
+  .command('chat')
+  .description('Start an interactive chat session')
+  .action(async () => {
+    if (process.stdout.isTTY) {
+      render(<ChatInterface />);
+    } else {
+      console.log(chalk.red('Chat mode requires an interactive terminal (TTY).'));
+      console.log(chalk.yellow('Use `runbook ask "your question"` for non-interactive mode.'));
+      process.exit(1);
     }
   });
 

@@ -1,0 +1,330 @@
+/**
+ * Interactive Chat Interface
+ *
+ * Provides a conversational interface for ongoing interactions with Runbook.
+ * Maintains conversation history and context across messages.
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { Text, Box, useInput, useApp, Static } from 'ink';
+import Spinner from 'ink-spinner';
+import { Agent } from '../agent/agent';
+import { createLLMClient } from '../model/llm';
+import { toolRegistry } from '../tools/registry';
+import { loadConfig, validateConfig } from '../utils/config';
+import type { AgentEvent } from '../agent/types';
+
+interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
+  toolCalls?: Array<{ tool: string; duration: number }>;
+}
+
+interface ChatState {
+  status: 'idle' | 'thinking' | 'tool' | 'error';
+  currentTool: string | null;
+  error: string | null;
+}
+
+export function ChatInterface() {
+  const { exit } = useApp();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [state, setState] = useState<ChatState>({
+    status: 'idle',
+    currentTool: null,
+    error: null,
+  });
+  const [agent, setAgent] = useState<Agent | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  // Initialize agent on mount
+  useEffect(() => {
+    initAgent();
+  }, []);
+
+  async function initAgent() {
+    try {
+      const config = await loadConfig();
+      const configErrors = validateConfig(config);
+      if (configErrors.length > 0) {
+        setConfigError(configErrors.join('\n'));
+        return;
+      }
+
+      const llm = createLLMClient({
+        provider: config.llm.provider,
+        model: config.llm.model,
+        apiKey: config.llm.apiKey,
+      });
+
+      const newAgent = new Agent({
+        llm,
+        tools: toolRegistry.getAll(),
+        skills: ['investigate-incident', 'deploy-service', 'scale-service'],
+        config: {
+          maxIterations: config.agent.maxIterations,
+          maxHypothesisDepth: config.agent.maxHypothesisDepth,
+          contextThresholdTokens: config.agent.contextThresholdTokens,
+        },
+      });
+
+      setAgent(newAgent);
+
+      // Add welcome message
+      setMessages([
+        {
+          role: 'system',
+          content: 'Welcome to Runbook Chat! Ask me anything about your infrastructure.\nType /help for commands, /exit to quit.',
+          timestamp: new Date(),
+        },
+      ]);
+    } catch (err) {
+      setConfigError(err instanceof Error ? err.message : 'Failed to initialize');
+    }
+  }
+
+  // Handle input
+  useInput((char, key) => {
+    if (state.status !== 'idle') return;
+
+    if (key.return) {
+      handleSubmit();
+    } else if (key.backspace || key.delete) {
+      setInput((prev) => prev.slice(0, -1));
+    } else if (key.ctrl && char === 'c') {
+      exit();
+    } else if (char && !key.ctrl && !key.meta) {
+      setInput((prev) => prev + char);
+    }
+  });
+
+  async function handleSubmit() {
+    const trimmedInput = input.trim();
+    if (!trimmedInput) return;
+
+    // Handle commands
+    if (trimmedInput.startsWith('/')) {
+      handleCommand(trimmedInput);
+      setInput('');
+      return;
+    }
+
+    if (!agent) {
+      setState({ ...state, error: 'Agent not initialized' });
+      return;
+    }
+
+    // Add user message
+    const userMessage: Message = {
+      role: 'user',
+      content: trimmedInput,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+    setInput('');
+
+    // Process with agent
+    setState({ status: 'thinking', currentTool: null, error: null });
+    const toolCalls: Array<{ tool: string; duration: number }> = [];
+
+    try {
+      let answer = '';
+
+      for await (const event of agent.run(trimmedInput)) {
+        switch (event.type) {
+          case 'thinking':
+            setState({ status: 'thinking', currentTool: null, error: null });
+            break;
+          case 'tool_start':
+            setState({ status: 'tool', currentTool: event.tool, error: null });
+            break;
+          case 'tool_end':
+            toolCalls.push({ tool: event.tool, duration: event.durationMs });
+            break;
+          case 'done':
+            answer = event.answer;
+            break;
+        }
+      }
+
+      // Add assistant message
+      const assistantMessage: Message = {
+        role: 'assistant',
+        content: answer,
+        timestamp: new Date(),
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+      setState({ status: 'idle', currentTool: null, error: null });
+    } catch (err) {
+      setState({
+        status: 'error',
+        currentTool: null,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  function handleCommand(cmd: string) {
+    const parts = cmd.slice(1).split(' ');
+    const command = parts[0].toLowerCase();
+
+    switch (command) {
+      case 'exit':
+      case 'quit':
+      case 'q':
+        exit();
+        break;
+
+      case 'clear':
+        setMessages([
+          {
+            role: 'system',
+            content: 'Chat cleared. How can I help?',
+            timestamp: new Date(),
+          },
+        ]);
+        break;
+
+      case 'help':
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'system',
+            content: `Available commands:
+  /help     - Show this help
+  /clear    - Clear chat history
+  /status   - Quick infrastructure status
+  /exit     - Exit chat
+
+Example queries:
+  "What's running in production?"
+  "Show me recent CloudWatch alarms"
+  "List all Lambda functions"
+  "Investigate high latency on the API"`,
+            timestamp: new Date(),
+          },
+        ]);
+        break;
+
+      case 'status':
+        // Trigger a status query
+        setInput('Give me a quick status of my infrastructure');
+        handleSubmit();
+        break;
+
+      default:
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'system',
+            content: `Unknown command: ${command}. Type /help for available commands.`,
+            timestamp: new Date(),
+          },
+        ]);
+    }
+  }
+
+  // Render config error
+  if (configError) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text color="red" bold>Configuration Error</Text>
+        <Text color="red">{configError}</Text>
+        <Text color="gray" dimColor>
+          Run `runbook init` to set up your configuration.
+        </Text>
+      </Box>
+    );
+  }
+
+  // Render loading state
+  if (!agent) {
+    return (
+      <Box padding={1}>
+        <Text color="cyan">
+          <Spinner type="dots" />
+        </Text>
+        <Text> Initializing Runbook...</Text>
+      </Box>
+    );
+  }
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      {/* Header */}
+      <Box marginBottom={1}>
+        <Text color="cyan" bold>Runbook Chat</Text>
+        <Text color="gray"> - Type /help for commands</Text>
+      </Box>
+
+      {/* Message history */}
+      <Static items={messages}>
+        {(message, index) => (
+          <Box key={index} flexDirection="column" marginBottom={1}>
+            {message.role === 'user' && (
+              <Box>
+                <Text color="green" bold>You: </Text>
+                <Text>{message.content}</Text>
+              </Box>
+            )}
+            {message.role === 'assistant' && (
+              <Box flexDirection="column">
+                <Box>
+                  <Text color="cyan" bold>Runbook: </Text>
+                </Box>
+                {message.toolCalls && message.toolCalls.length > 0 && (
+                  <Box marginLeft={2}>
+                    <Text color="gray" dimColor>
+                      [{message.toolCalls.map((t) => `${t.tool} ${t.duration}ms`).join(', ')}]
+                    </Text>
+                  </Box>
+                )}
+                <Box marginLeft={2}>
+                  <Text>{message.content}</Text>
+                </Box>
+              </Box>
+            )}
+            {message.role === 'system' && (
+              <Box>
+                <Text color="yellow">{message.content}</Text>
+              </Box>
+            )}
+          </Box>
+        )}
+      </Static>
+
+      {/* Current status */}
+      {state.status !== 'idle' && (
+        <Box marginY={1}>
+          <Text color="cyan">
+            <Spinner type="dots" />
+          </Text>
+          <Text>
+            {' '}
+            {state.status === 'thinking' && 'Thinking...'}
+            {state.status === 'tool' && `Running ${state.currentTool}...`}
+          </Text>
+        </Box>
+      )}
+
+      {/* Error */}
+      {state.error && (
+        <Box marginY={1}>
+          <Text color="red">Error: {state.error}</Text>
+        </Box>
+      )}
+
+      {/* Input */}
+      {state.status === 'idle' && (
+        <Box marginTop={1}>
+          <Text color="green" bold>{'> '}</Text>
+          <Text>{input}</Text>
+          <Text color="gray">█</Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
