@@ -9,6 +9,14 @@ import type { Tool } from '../agent/types';
 import { getActiveAlarms, filterLogEvents, listLogGroups } from './aws/cloudwatch';
 import { getIncident, getIncidentAlerts, listIncidents, addIncidentNote } from './incident/pagerduty';
 import {
+  isSlackConfigured,
+  postMessage,
+  postInvestigationUpdate,
+  postRootCauseIdentified,
+  getChannelMessages,
+  findChannel,
+} from './incident/slack';
+import {
   queryMetrics,
   searchLogs,
   searchTraces,
@@ -1029,9 +1037,360 @@ toolRegistry.registerCategory('knowledge', 'Knowledge Base', [
   searchKnowledgeTool,
 ]);
 
+/**
+ * PagerDuty Add Note Tool
+ */
+export const pagerdutyAddNoteTool = defineTool(
+  'pagerduty_add_note',
+  `Add a note to a PagerDuty incident. Use to document investigation findings, actions taken, or updates.`,
+  {
+    type: 'object',
+    properties: {
+      incident_id: {
+        type: 'string',
+        description: 'PagerDuty incident ID',
+      },
+      note: {
+        type: 'string',
+        description: 'Note content to add',
+      },
+      email: {
+        type: 'string',
+        description: 'Email of the user adding the note (for audit)',
+      },
+    },
+    required: ['incident_id', 'note', 'email'],
+  },
+  async (args) => {
+    try {
+      const incidentId = args.incident_id as string;
+      const note = args.note as string;
+      const email = args.email as string;
+
+      const result = await addIncidentNote(incidentId, note, email);
+
+      return {
+        success: true,
+        noteId: result.id,
+        message: 'Note added to incident',
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * Slack Post Update Tool
+ */
+export const slackPostUpdateTool = defineTool(
+  'slack_post_update',
+  `Post an investigation update to a Slack channel. Use to keep stakeholders informed about incident progress.`,
+  {
+    type: 'object',
+    properties: {
+      channel: {
+        type: 'string',
+        description: 'Slack channel ID or name (e.g., #incidents, C12345678)',
+      },
+      incident_id: {
+        type: 'string',
+        description: 'Incident ID being investigated',
+      },
+      title: {
+        type: 'string',
+        description: 'Brief title of the incident',
+      },
+      status: {
+        type: 'string',
+        description: 'Current investigation status',
+        enum: ['investigating', 'identified', 'monitoring', 'resolved'],
+      },
+      summary: {
+        type: 'string',
+        description: 'Summary of current findings and status',
+      },
+      severity: {
+        type: 'string',
+        description: 'Incident severity',
+        enum: ['low', 'medium', 'high', 'critical'],
+      },
+      findings: {
+        type: 'array',
+        description: 'Key findings discovered',
+        items: { type: 'string' },
+      },
+      next_steps: {
+        type: 'array',
+        description: 'Planned next steps',
+        items: { type: 'string' },
+      },
+      thread_ts: {
+        type: 'string',
+        description: 'Thread timestamp to reply in (for threaded updates)',
+      },
+    },
+    required: ['channel', 'incident_id', 'title', 'status', 'summary'],
+  },
+  async (args) => {
+    if (!isSlackConfigured()) {
+      return {
+        error: 'Slack not configured',
+        hint: 'Set SLACK_BOT_TOKEN environment variable or configure in .runbook/config.yaml',
+      };
+    }
+
+    try {
+      let channelId = args.channel as string;
+
+      // If channel name provided, find the ID
+      if (channelId.startsWith('#')) {
+        const channel = await findChannel(channelId);
+        if (!channel) {
+          return { error: `Channel ${channelId} not found` };
+        }
+        channelId = channel.id;
+      }
+
+      const result = await postInvestigationUpdate(
+        channelId,
+        {
+          incidentId: args.incident_id as string,
+          title: args.title as string,
+          status: args.status as 'investigating' | 'identified' | 'monitoring' | 'resolved',
+          summary: args.summary as string,
+          severity: args.severity as 'low' | 'medium' | 'high' | 'critical' | undefined,
+          findings: args.findings as string[] | undefined,
+          nextSteps: args.next_steps as string[] | undefined,
+        },
+        args.thread_ts as string | undefined
+      );
+
+      return {
+        success: true,
+        channel: result.channel,
+        messageTs: result.ts,
+        message: 'Update posted to Slack',
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * Slack Post Root Cause Tool
+ */
+export const slackPostRootCauseTool = defineTool(
+  'slack_post_root_cause',
+  `Post a root cause identification message to Slack. Use when investigation has identified the likely root cause.`,
+  {
+    type: 'object',
+    properties: {
+      channel: {
+        type: 'string',
+        description: 'Slack channel ID or name',
+      },
+      incident_id: {
+        type: 'string',
+        description: 'Incident ID',
+      },
+      root_cause: {
+        type: 'string',
+        description: 'The identified root cause',
+      },
+      confidence: {
+        type: 'string',
+        description: 'Confidence level in the root cause',
+        enum: ['low', 'medium', 'high'],
+      },
+      evidence: {
+        type: 'array',
+        description: 'Evidence supporting the root cause',
+        items: { type: 'string' },
+      },
+      suggested_remediation: {
+        type: 'string',
+        description: 'Suggested fix or remediation',
+      },
+      thread_ts: {
+        type: 'string',
+        description: 'Thread timestamp to reply in',
+      },
+    },
+    required: ['channel', 'incident_id', 'root_cause', 'confidence', 'evidence'],
+  },
+  async (args) => {
+    if (!isSlackConfigured()) {
+      return {
+        error: 'Slack not configured',
+        hint: 'Set SLACK_BOT_TOKEN environment variable',
+      };
+    }
+
+    try {
+      let channelId = args.channel as string;
+
+      if (channelId.startsWith('#')) {
+        const channel = await findChannel(channelId);
+        if (!channel) {
+          return { error: `Channel ${channelId} not found` };
+        }
+        channelId = channel.id;
+      }
+
+      const result = await postRootCauseIdentified(
+        channelId,
+        {
+          incidentId: args.incident_id as string,
+          rootCause: args.root_cause as string,
+          confidence: args.confidence as 'low' | 'medium' | 'high',
+          evidence: args.evidence as string[],
+          suggestedRemediation: args.suggested_remediation as string | undefined,
+        },
+        args.thread_ts as string | undefined
+      );
+
+      return {
+        success: true,
+        channel: result.channel,
+        messageTs: result.ts,
+        message: 'Root cause posted to Slack',
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * Slack Read Thread Tool
+ */
+export const slackReadThreadTool = defineTool(
+  'slack_read_thread',
+  `Read messages from a Slack channel or thread. Use to get incident context from ongoing discussions.`,
+  {
+    type: 'object',
+    properties: {
+      channel: {
+        type: 'string',
+        description: 'Slack channel ID or name',
+      },
+      thread_ts: {
+        type: 'string',
+        description: 'Thread timestamp to read (optional, reads channel history if not provided)',
+      },
+      limit: {
+        type: 'number',
+        description: 'Max messages to return (default: 50)',
+      },
+    },
+    required: ['channel'],
+  },
+  async (args) => {
+    if (!isSlackConfigured()) {
+      return {
+        error: 'Slack not configured',
+        hint: 'Set SLACK_BOT_TOKEN environment variable',
+      };
+    }
+
+    try {
+      let channelId = args.channel as string;
+
+      if (channelId.startsWith('#')) {
+        const channel = await findChannel(channelId);
+        if (!channel) {
+          return { error: `Channel ${channelId} not found` };
+        }
+        channelId = channel.id;
+      }
+
+      const messages = await getChannelMessages(channelId, {
+        threadTs: args.thread_ts as string | undefined,
+        limit: (args.limit as number) || 50,
+      });
+
+      return {
+        messages: messages.map((m) => ({
+          timestamp: m.ts,
+          text: m.text,
+          isThreaded: !!m.threadTs,
+        })),
+        count: messages.length,
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * Slack Simple Message Tool
+ */
+export const slackMessageTool = defineTool(
+  'slack_message',
+  `Send a simple message to a Slack channel.`,
+  {
+    type: 'object',
+    properties: {
+      channel: {
+        type: 'string',
+        description: 'Slack channel ID or name',
+      },
+      text: {
+        type: 'string',
+        description: 'Message text (supports Slack markdown)',
+      },
+      thread_ts: {
+        type: 'string',
+        description: 'Thread timestamp to reply in',
+      },
+    },
+    required: ['channel', 'text'],
+  },
+  async (args) => {
+    if (!isSlackConfigured()) {
+      return {
+        error: 'Slack not configured',
+        hint: 'Set SLACK_BOT_TOKEN environment variable',
+      };
+    }
+
+    try {
+      let channelId = args.channel as string;
+
+      if (channelId.startsWith('#')) {
+        const channel = await findChannel(channelId);
+        if (!channel) {
+          return { error: `Channel ${channelId} not found` };
+        }
+        channelId = channel.id;
+      }
+
+      const result = await postMessage(channelId, args.text as string, {
+        threadTs: args.thread_ts as string | undefined,
+      });
+
+      return {
+        success: true,
+        channel: result.channel,
+        messageTs: result.ts,
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
 toolRegistry.registerCategory('incident', 'Incident Management', [
   pagerdutyGetIncidentTool,
   pagerdutyListIncidentsTool,
+  pagerdutyAddNoteTool,
+  slackPostUpdateTool,
+  slackPostRootCauseTool,
+  slackReadThreadTool,
+  slackMessageTool,
 ]);
 
 toolRegistry.registerCategory('skills', 'Skill Invocation', [skillTool]);

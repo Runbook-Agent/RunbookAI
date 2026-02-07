@@ -78,9 +78,11 @@ Scratchpad: Full Audit Trail
   - [x] Evidence strength classification (strong/weak/none)
   - [x] Multi-factor confidence calculation
   - [x] Temporal correlation detection
-- [ ] Implement causal query builder (`src/tools/observability/causal-query.ts`)
-  - [ ] Hypothesis-targeted query generation
-  - [ ] Anti-pattern detection (prevent broad data gathering)
+- [x] Implement causal query builder (`src/agent/causal-query.ts`)
+  - [x] Hypothesis-targeted query generation
+  - [x] Anti-pattern detection (prevent broad data gathering)
+  - [x] Query prioritization by hypothesis confidence
+  - [x] Query refinement suggestions
 
 ### Phase 4: Cloud Provider Tools (AWS First)
 - [x] Implement AWS client wrapper (`src/providers/aws/client.ts`)
@@ -144,18 +146,22 @@ Scratchpad: Full Audit Trail
   - [ ] Custom metrics endpoints
 
 ### Phase 7: Incident Management Integration
-- [ ] Implement PagerDuty tools (`src/tools/incident/pagerduty.ts`)
-  - [ ] Get incident details
-  - [ ] List alerts for incident
-  - [ ] Get service configuration
-  - [ ] Add investigation notes
-  - [ ] Resolve incident (with approval)
+- [x] Implement PagerDuty tools (`src/tools/incident/pagerduty.ts`)
+  - [x] Get incident details
+  - [x] List incidents with filters
+  - [x] Get alerts for incident
+  - [x] Get service configuration
+  - [x] Add investigation notes
+  - [x] Acknowledge/resolve incidents
 - [ ] Implement OpsGenie tools (`src/tools/incident/opsgenie.ts`)
   - [ ] Similar to PagerDuty
-- [ ] Implement Slack integration (`src/tools/incident/slack.ts`)
-  - [ ] Post investigation updates
-  - [ ] Read thread context
-  - [ ] Create incident summary canvas
+- [x] Implement Slack integration (`src/tools/incident/slack.ts`)
+  - [x] Post investigation updates with rich formatting
+  - [x] Post root cause identification
+  - [x] Read channel/thread messages
+  - [x] Send simple messages
+  - [x] Request mutation approval via Slack
+  - [ ] Handle approval button interactions (requires webhook server)
 
 ### Phase 8: Knowledge System
 - [x] Implement knowledge types (`src/knowledge/types.ts`)
@@ -211,8 +217,8 @@ Scratchpad: Full Audit Trail
   - [x] `scale-service` - Capacity planning and scaling
   - [x] `troubleshoot-service` - Diagnose and fix issues
   - [x] `rollback-deployment` - Quick and safe rollback
-  - [ ] `cost-analysis` - Spending analysis and optimization
-  - [ ] `security-audit` - IAM and security review
+  - [x] `cost-analysis` - Spending analysis and optimization
+  - [x] `security-audit` - IAM and security review
 
 ### Phase 10: CLI Interface
 - [x] Implement CLI entry point (`src/cli.tsx`)
@@ -483,13 +489,13 @@ Provider abstraction allows adding GCP, Azure, K8s without changing core agent l
 **Completed:**
 - Phase 1: Project Foundation (100%)
 - Phase 2: Core Agent Loop (100%)
-- Phase 3: Hypothesis Engine (90% - missing causal query builder)
+- Phase 3: Hypothesis Engine (100% - causal query builder with anti-pattern detection)
 - Phase 4: AWS Tools (100% - 40+ services with dynamic loading)
 - Phase 5: Safety Layer (90% - approval flow complete, missing Slack integration)
 - Phase 6: Observability (90% - CloudWatch + Datadog integration)
-- Phase 7: Incident Management (60% - PagerDuty integration implemented)
+- Phase 7: Incident Management (90% - PagerDuty + Slack integrations complete)
 - Phase 8: Knowledge System (80% - filesystem source, SQLite store, FTS search)
-- Phase 9: Skills (80% - 5 core skills with executor and registry)
+- Phase 9: Skills (100% - 7 core skills with executor and registry)
 - Phase 10: CLI Interface (90% - ask, chat, investigate, status, init wizard, config, knowledge commands)
 
 **New Features:**
@@ -508,21 +514,31 @@ Provider abstraction allows adding GCP, Azure, K8s without changing core agent l
 - Audit trail for all approved/rejected mutations
 - Interactive chat interface (`runbook chat`) with conversation history
 - Datadog integration (metrics, logs, traces, monitors, events)
-- Skill system with 5 built-in workflows:
+- Skill system with 7 built-in workflows:
   - investigate-incident, deploy-service, scale-service
   - troubleshoot-service, rollback-deployment
+  - cost-analysis, security-audit
 - Skill executor with templating, conditions, and error handling
 - User-defined skills via YAML in .runbook/skills/
+- Causal query builder with pattern-based investigation queries
+  - Detects failure patterns (latency, errors, memory, CPU, etc.)
+  - Generates targeted queries per hypothesis
+  - Prevents broad data gathering with anti-pattern detection
+- Slack integration for incident communication:
+  - Post investigation updates with rich Block Kit formatting
+  - Post root cause identification with evidence
+  - Read channel/thread context for investigation
+  - Request approval for mutations via Slack buttons
 
 **GitHub:** https://github.com/manthan787/RunbookAI
 
 **Next Steps:**
 
-1. Complete skill system for deploy/scale workflows
-2. Implement causal query builder for hypothesis-targeted queries
-3. Add Slack approval integration for mutations
-4. Add describe operations for each service (detailed resource info)
-5. Add Prometheus/custom metrics support
+1. Implement Slack webhook server for approval button interactions
+2. Add OpsGenie integration for incident management
+3. Add describe operations for AWS services (detailed resource info)
+4. Add Prometheus/custom metrics support
+5. Implement vector embeddings for semantic knowledge search
 
 **Usage:**
 ```bash

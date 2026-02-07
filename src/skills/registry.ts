@@ -19,6 +19,8 @@ import { scaleServiceSkill } from './builtin/scale-service';
 import { deployServiceSkill } from './builtin/deploy-service';
 import { troubleshootServiceSkill } from './builtin/troubleshoot-service';
 import { rollbackDeploymentSkill } from './builtin/rollback-deployment';
+import { costAnalysisSkill } from './builtin/cost-analysis';
+import { securityAuditSkill } from './builtin/security-audit';
 
 class SkillRegistry {
   private skills: Map<string, SkillDefinition> = new Map();
@@ -36,6 +38,8 @@ class SkillRegistry {
       deployServiceSkill,
       troubleshootServiceSkill,
       rollbackDeploymentSkill,
+      costAnalysisSkill,
+      securityAuditSkill,
     ];
 
     for (const skill of builtins) {
