@@ -17,6 +17,16 @@ import {
   findChannel,
 } from './incident/slack';
 import {
+  isOpsGenieConfigured,
+  getAlert as getOpsGenieAlert,
+  listAlerts as listOpsGenieAlerts,
+  getIncident as getOpsGenieIncident,
+  listIncidents as listOpsGenieIncidents,
+  addAlertNote as addOpsGenieAlertNote,
+  acknowledgeAlert as acknowledgeOpsGenieAlert,
+  closeAlert as closeOpsGenieAlert,
+} from './incident/opsgenie';
+import {
   queryMetrics,
   searchLogs,
   searchTraces,
@@ -1383,10 +1393,354 @@ export const slackMessageTool = defineTool(
   }
 );
 
+/**
+ * OpsGenie Get Alert Tool
+ */
+export const opsgenieGetAlertTool = defineTool(
+  'opsgenie_get_alert',
+  `Fetch details about an OpsGenie alert including status, priority, and details.`,
+  {
+    type: 'object',
+    properties: {
+      alert_id: {
+        type: 'string',
+        description: 'OpsGenie alert ID',
+      },
+    },
+    required: ['alert_id'],
+  },
+  async (args) => {
+    if (!isOpsGenieConfigured()) {
+      return {
+        error: 'OpsGenie not configured',
+        hint: 'Set OPSGENIE_API_KEY environment variable',
+      };
+    }
+
+    try {
+      const alertId = args.alert_id as string;
+      const alert = await getOpsGenieAlert(alertId);
+
+      return {
+        alert: {
+          id: alert.id,
+          tinyId: alert.tinyId,
+          message: alert.message,
+          status: alert.status,
+          priority: alert.priority,
+          acknowledged: alert.acknowledged,
+          source: alert.source,
+          tags: alert.tags,
+          teams: alert.teams.map((t) => t.name),
+          createdAt: alert.createdAt,
+          description: alert.description,
+          details: alert.details,
+        },
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * OpsGenie List Alerts Tool
+ */
+export const opsgenieListAlertsTool = defineTool(
+  'opsgenie_list_alerts',
+  `List OpsGenie alerts, optionally filtered by status or query.`,
+  {
+    type: 'object',
+    properties: {
+      status: {
+        type: 'string',
+        description: 'Filter by status',
+        enum: ['open', 'closed', 'acked'],
+      },
+      query: {
+        type: 'string',
+        description: 'OpsGenie search query',
+      },
+      limit: {
+        type: 'number',
+        description: 'Max alerts to return (default: 25)',
+      },
+    },
+  },
+  async (args) => {
+    if (!isOpsGenieConfigured()) {
+      return {
+        error: 'OpsGenie not configured',
+        hint: 'Set OPSGENIE_API_KEY environment variable',
+      };
+    }
+
+    try {
+      const alerts = await listOpsGenieAlerts({
+        status: args.status as 'open' | 'closed' | 'acked' | undefined,
+        query: args.query as string | undefined,
+        limit: (args.limit as number) || 25,
+      });
+
+      return {
+        alerts: alerts.map((a) => ({
+          id: a.id,
+          tinyId: a.tinyId,
+          message: a.message,
+          status: a.status,
+          priority: a.priority,
+          source: a.source,
+          createdAt: a.createdAt,
+        })),
+        count: alerts.length,
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * OpsGenie Get Incident Tool
+ */
+export const opsgenieGetIncidentTool = defineTool(
+  'opsgenie_get_incident',
+  `Fetch details about an OpsGenie incident.`,
+  {
+    type: 'object',
+    properties: {
+      incident_id: {
+        type: 'string',
+        description: 'OpsGenie incident ID',
+      },
+    },
+    required: ['incident_id'],
+  },
+  async (args) => {
+    if (!isOpsGenieConfigured()) {
+      return {
+        error: 'OpsGenie not configured',
+        hint: 'Set OPSGENIE_API_KEY environment variable',
+      };
+    }
+
+    try {
+      const incident = await getOpsGenieIncident(args.incident_id as string);
+
+      return {
+        incident: {
+          id: incident.id,
+          tinyId: incident.tinyId,
+          message: incident.message,
+          status: incident.status,
+          priority: incident.priority,
+          impactedServices: incident.impactedServices,
+          tags: incident.tags,
+          createdAt: incident.createdAt,
+          updatedAt: incident.updatedAt,
+        },
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * OpsGenie List Incidents Tool
+ */
+export const opsgenieListIncidentsTool = defineTool(
+  'opsgenie_list_incidents',
+  `List OpsGenie incidents, optionally filtered by status.`,
+  {
+    type: 'object',
+    properties: {
+      status: {
+        type: 'string',
+        description: 'Filter by status',
+        enum: ['open', 'resolved'],
+      },
+      limit: {
+        type: 'number',
+        description: 'Max incidents to return (default: 25)',
+      },
+    },
+  },
+  async (args) => {
+    if (!isOpsGenieConfigured()) {
+      return {
+        error: 'OpsGenie not configured',
+        hint: 'Set OPSGENIE_API_KEY environment variable',
+      };
+    }
+
+    try {
+      const incidents = await listOpsGenieIncidents({
+        status: args.status as 'open' | 'resolved' | undefined,
+        limit: (args.limit as number) || 25,
+      });
+
+      return {
+        incidents: incidents.map((i) => ({
+          id: i.id,
+          tinyId: i.tinyId,
+          message: i.message,
+          status: i.status,
+          priority: i.priority,
+          impactedServices: i.impactedServices,
+          createdAt: i.createdAt,
+        })),
+        count: incidents.length,
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * OpsGenie Add Note Tool
+ */
+export const opsgenieAddNoteTool = defineTool(
+  'opsgenie_add_note',
+  `Add a note to an OpsGenie alert. Use to document investigation findings.`,
+  {
+    type: 'object',
+    properties: {
+      alert_id: {
+        type: 'string',
+        description: 'OpsGenie alert ID',
+      },
+      note: {
+        type: 'string',
+        description: 'Note content to add',
+      },
+    },
+    required: ['alert_id', 'note'],
+  },
+  async (args) => {
+    if (!isOpsGenieConfigured()) {
+      return {
+        error: 'OpsGenie not configured',
+        hint: 'Set OPSGENIE_API_KEY environment variable',
+      };
+    }
+
+    try {
+      const result = await addOpsGenieAlertNote(args.alert_id as string, args.note as string);
+
+      return {
+        success: true,
+        requestId: result.requestId,
+        message: 'Note added to alert',
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * OpsGenie Acknowledge Alert Tool
+ */
+export const opsgenieAcknowledgeAlertTool = defineTool(
+  'opsgenie_acknowledge_alert',
+  `Acknowledge an OpsGenie alert.`,
+  {
+    type: 'object',
+    properties: {
+      alert_id: {
+        type: 'string',
+        description: 'OpsGenie alert ID',
+      },
+      note: {
+        type: 'string',
+        description: 'Optional note to add',
+      },
+    },
+    required: ['alert_id'],
+  },
+  async (args) => {
+    if (!isOpsGenieConfigured()) {
+      return {
+        error: 'OpsGenie not configured',
+        hint: 'Set OPSGENIE_API_KEY environment variable',
+      };
+    }
+
+    try {
+      const result = await acknowledgeOpsGenieAlert(
+        args.alert_id as string,
+        args.note as string | undefined
+      );
+
+      return {
+        success: true,
+        requestId: result.requestId,
+        message: 'Alert acknowledged',
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
+/**
+ * OpsGenie Close Alert Tool
+ */
+export const opsgenieCloseAlertTool = defineTool(
+  'opsgenie_close_alert',
+  `Close an OpsGenie alert.`,
+  {
+    type: 'object',
+    properties: {
+      alert_id: {
+        type: 'string',
+        description: 'OpsGenie alert ID',
+      },
+      note: {
+        type: 'string',
+        description: 'Optional resolution note',
+      },
+    },
+    required: ['alert_id'],
+  },
+  async (args) => {
+    if (!isOpsGenieConfigured()) {
+      return {
+        error: 'OpsGenie not configured',
+        hint: 'Set OPSGENIE_API_KEY environment variable',
+      };
+    }
+
+    try {
+      const result = await closeOpsGenieAlert(
+        args.alert_id as string,
+        args.note as string | undefined
+      );
+
+      return {
+        success: true,
+        requestId: result.requestId,
+        message: 'Alert closed',
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+);
+
 toolRegistry.registerCategory('incident', 'Incident Management', [
   pagerdutyGetIncidentTool,
   pagerdutyListIncidentsTool,
   pagerdutyAddNoteTool,
+  opsgenieGetAlertTool,
+  opsgenieListAlertsTool,
+  opsgenieGetIncidentTool,
+  opsgenieListIncidentsTool,
+  opsgenieAddNoteTool,
+  opsgenieAcknowledgeAlertTool,
+  opsgenieCloseAlertTool,
   slackPostUpdateTool,
   slackPostRootCauseTool,
   slackReadThreadTool,

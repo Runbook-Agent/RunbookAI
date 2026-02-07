@@ -153,8 +153,13 @@ Scratchpad: Full Audit Trail
   - [x] Get service configuration
   - [x] Add investigation notes
   - [x] Acknowledge/resolve incidents
-- [ ] Implement OpsGenie tools (`src/tools/incident/opsgenie.ts`)
-  - [ ] Similar to PagerDuty
+- [x] Implement OpsGenie tools (`src/tools/incident/opsgenie.ts`)
+  - [x] Get alert details
+  - [x] List alerts with filters
+  - [x] Get incident details
+  - [x] List incidents
+  - [x] Add notes to alerts
+  - [x] Acknowledge/close alerts
 - [x] Implement Slack integration (`src/tools/incident/slack.ts`)
   - [x] Post investigation updates with rich formatting
   - [x] Post root cause identification
@@ -493,7 +498,7 @@ Provider abstraction allows adding GCP, Azure, K8s without changing core agent l
 - Phase 4: AWS Tools (100% - 40+ services with dynamic loading)
 - Phase 5: Safety Layer (90% - approval flow complete, missing Slack integration)
 - Phase 6: Observability (90% - CloudWatch + Datadog integration)
-- Phase 7: Incident Management (90% - PagerDuty + Slack integrations complete)
+- Phase 7: Incident Management (100% - PagerDuty, OpsGenie, Slack complete)
 - Phase 8: Knowledge System (80% - filesystem source, SQLite store, FTS search)
 - Phase 9: Skills (100% - 7 core skills with executor and registry)
 - Phase 10: CLI Interface (90% - ask, chat, investigate, status, init wizard, config, knowledge commands)
@@ -529,16 +534,20 @@ Provider abstraction allows adding GCP, Azure, K8s without changing core agent l
   - Post root cause identification with evidence
   - Read channel/thread context for investigation
   - Request approval for mutations via Slack buttons
+- OpsGenie integration:
+  - Get/list alerts and incidents
+  - Add investigation notes
+  - Acknowledge and close alerts
 
 **GitHub:** https://github.com/manthan787/RunbookAI
 
 **Next Steps:**
 
 1. Implement Slack webhook server for approval button interactions
-2. Add OpsGenie integration for incident management
-3. Add describe operations for AWS services (detailed resource info)
-4. Add Prometheus/custom metrics support
-5. Implement vector embeddings for semantic knowledge search
+2. Add describe operations for AWS services (detailed resource info)
+3. Add Prometheus/custom metrics support
+4. Implement vector embeddings for semantic knowledge search
+5. Add service graph for dependency visualization
 
 **Usage:**
 ```bash
