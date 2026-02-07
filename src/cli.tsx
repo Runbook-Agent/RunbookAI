@@ -15,6 +15,8 @@ import { Agent } from './agent/agent';
 import { createLLMClient } from './model/llm';
 import { toolRegistry } from './tools/registry';
 import { loadConfig, validateConfig } from './utils/config';
+import { quickSetup, loadServiceConfig, ONBOARDING_PROMPTS } from './config/onboarding';
+import { createRetriever } from './knowledge/retriever';
 import type { AgentEvent } from './agent/types';
 
 // Version from package.json
@@ -266,14 +268,52 @@ program
     }
   });
 
+// Init command - setup wizard
+program
+  .command('init')
+  .description('Initialize Runbook with a quick setup wizard')
+  .option('-t, --template <template>', 'Use a template: ecs-rds, serverless, enterprise')
+  .option('-r, --regions <regions>', 'AWS regions (comma-separated)', 'us-east-1')
+  .action(async (options: { template?: string; regions?: string }) => {
+    console.log(chalk.cyan(ONBOARDING_PROMPTS.welcome));
+
+    const template = options.template as 'ecs-rds' | 'serverless' | 'enterprise' | undefined;
+    const regions = options.regions?.split(',').map((r) => r.trim()) || ['us-east-1'];
+
+    if (template) {
+      console.log(chalk.blue(`Using template: ${template}`));
+      console.log(chalk.blue(`Regions: ${regions.join(', ')}`));
+
+      const configPath = await quickSetup(template, regions);
+      console.log(chalk.green(`\nConfiguration saved to ${configPath}`));
+      console.log(chalk.cyan(ONBOARDING_PROMPTS.complete));
+    } else {
+      console.log(chalk.yellow('Interactive setup coming soon. For now, use --template:'));
+      console.log('  runbook init --template ecs-rds');
+      console.log('  runbook init --template serverless');
+      console.log('  runbook init --template enterprise --regions us-east-1,us-west-2');
+    }
+  });
+
 // Config command
 program
   .command('config')
   .description('Show current configuration')
-  .action(async () => {
-    const config = await loadConfig();
-    console.log(chalk.cyan('Current Configuration:'));
-    console.log(JSON.stringify(config, null, 2));
+  .option('--services', 'Show services configuration')
+  .action(async (options: { services?: boolean }) => {
+    if (options.services) {
+      const serviceConfig = await loadServiceConfig();
+      if (serviceConfig) {
+        console.log(chalk.cyan('Services Configuration:'));
+        console.log(JSON.stringify(serviceConfig, null, 2));
+      } else {
+        console.log(chalk.yellow('No services configured. Run "runbook init" to set up.'));
+      }
+    } else {
+      const config = await loadConfig();
+      console.log(chalk.cyan('Current Configuration:'));
+      console.log(JSON.stringify(config, null, 2));
+    }
   });
 
 // Knowledge commands
@@ -285,7 +325,16 @@ knowledge
   .command('sync')
   .description('Sync knowledge from all configured sources')
   .action(async () => {
-    console.log(chalk.yellow('Knowledge sync not yet implemented'));
+    console.log(chalk.blue('Syncing knowledge from configured sources...'));
+    try {
+      const retriever = createRetriever();
+      const { added, updated } = await retriever.sync();
+      console.log(chalk.green(`Sync complete: ${added} added, ${updated} updated`));
+      console.log(chalk.green(`Total documents: ${retriever.getDocumentCount()}`));
+      retriever.close();
+    } catch (error) {
+      console.error(chalk.red(`Sync failed: ${error instanceof Error ? error.message : error}`));
+    }
   });
 
 knowledge
@@ -293,7 +342,25 @@ knowledge
   .description('Search the knowledge base')
   .action(async (queryParts: string[]) => {
     const query = queryParts.join(' ');
-    console.log(chalk.yellow(`Knowledge search for "${query}" not yet implemented`));
+    console.log(chalk.blue(`Searching for: "${query}"`));
+    try {
+      const retriever = createRetriever();
+      const results = await retriever.search(query, { limit: 5 });
+      const total = results.runbooks.length + results.postmortems.length + results.knownIssues.length;
+
+      if (total === 0) {
+        console.log(chalk.yellow('No matching documents found.'));
+      } else {
+        console.log(chalk.green(`Found ${total} results:\n`));
+        for (const doc of [...results.runbooks, ...results.postmortems, ...results.knownIssues]) {
+          console.log(chalk.cyan(`[${doc.type}] ${doc.title}`));
+          console.log(chalk.gray(doc.content.slice(0, 200) + '...\n'));
+        }
+      }
+      retriever.close();
+    } catch (error) {
+      console.error(chalk.red(`Search failed: ${error instanceof Error ? error.message : error}`));
+    }
   });
 
 // Parse and run
