@@ -583,11 +583,18 @@ Provider abstraction allows adding GCP, Azure, K8s without changing core agent l
 
 **Next Steps:**
 
-1. Implement Slack webhook server for approval button interactions
-2. Add describe operations for AWS services (detailed resource info)
-3. Add service graph for dependency visualization
-4. Add file watching for hot reload of knowledge
-5. Add reranker for LLM-based relevance scoring
+### Priority 1: Agent Reasoning System (see docs/AGENT_DESIGN.md)
+1. Implement investigation state machine (triage → hypothesize → investigate → evaluate → conclude → remediate)
+2. Add structured output parsing for LLM hypothesis/evidence responses
+3. Integrate causal query builder into investigation loop
+4. Wire hypothesis engine lifecycle (create, update, prune, confirm)
+5. Add log analysis with pattern extraction and LLM summarization
+6. Implement conversation memory for chat mode
+
+### Priority 2: Infrastructure
+1. Add service dependency graph
+2. Implement Slack webhook server for approval buttons
+3. Add Kubernetes integration
 
 **Usage:**
 ```bash
