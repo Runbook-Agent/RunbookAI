@@ -3,12 +3,19 @@
  *
  * Persists as JSONL for auditability and implements graceful limits
  * to prevent retry loops without blocking the agent.
+ *
+ * Supports tiered storage:
+ * - Full: Complete tool results in context
+ * - Compact: Summarized results for token efficiency
+ * - Cleared: Results removed from context but available via get_full_result
  */
 
 import { mkdir, appendFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import type { ScratchpadEntry, ToolResultEntry } from './types';
+import type { CompactToolResult } from './tool-summarizer';
+import type { CompactionPlan, ScoredResult } from './context-compactor';
 
 interface ToolUsageStats {
   callCount: number;
@@ -20,11 +27,37 @@ interface ToolLimitResult {
   warning?: string;
 }
 
+/**
+ * Storage tier for a tool result.
+ */
+export type StorageTier = 'full' | 'compact' | 'cleared';
+
+/**
+ * Extended tool result with tiered storage metadata.
+ */
+export interface TieredToolResult extends ToolResultEntry {
+  /** Unique result ID for drill-down retrieval */
+  resultId: string;
+  /** Current storage tier */
+  tier: StorageTier;
+  /** Compact summary if available */
+  compact?: CompactToolResult;
+  /** Importance score from compaction (0-1) */
+  importanceScore?: number;
+}
+
 export class Scratchpad {
   private entries: ScratchpadEntry[] = [];
   private toolUsage: Map<string, ToolUsageStats> = new Map();
   private filePath: string;
   private initialized = false;
+
+  /** Tiered tool results with storage metadata */
+  private tieredResults: Map<string, TieredToolResult> = new Map();
+  /** Result ID counter for generating unique IDs */
+  private resultIdCounter = 0;
+  /** Full results preserved for drill-down (cleared from context) */
+  private archivedResults: Map<string, ToolResultEntry> = new Map();
 
   constructor(
     private readonly baseDir: string,
@@ -65,6 +98,54 @@ export class Scratchpad {
 
     // Persist to JSONL
     await appendFile(this.filePath, JSON.stringify(fullEntry) + '\n');
+  }
+
+  /**
+   * Append a tool result with tiered storage support.
+   * Returns the generated result ID for reference.
+   */
+  async appendToolResult(
+    entry: Omit<ToolResultEntry, 'type' | 'timestamp'>,
+    options: {
+      compact?: CompactToolResult;
+      tier?: StorageTier;
+    } = {}
+  ): Promise<string> {
+    await this.init();
+
+    // Generate unique result ID
+    const resultId = this.generateResultId(entry.tool);
+
+    const fullEntry: TieredToolResult = {
+      ...entry,
+      type: 'tool_result',
+      timestamp: new Date().toISOString(),
+      resultId,
+      tier: options.tier || 'full',
+      compact: options.compact,
+    };
+
+    this.entries.push(fullEntry);
+    this.tieredResults.set(resultId, fullEntry);
+
+    // Track tool usage for limits
+    this.trackToolUsage(fullEntry);
+
+    // Persist to JSONL (with resultId for later retrieval)
+    await appendFile(this.filePath, JSON.stringify(fullEntry) + '\n');
+
+    return resultId;
+  }
+
+  /**
+   * Generate a unique result ID.
+   */
+  private generateResultId(toolName: string): string {
+    this.resultIdCounter++;
+    const toolPrefix = toolName.slice(0, 3).toLowerCase();
+    const timestamp = Date.now().toString(36).slice(-4);
+    const counter = this.resultIdCounter.toString(36).padStart(2, '0');
+    return `${toolPrefix}-${timestamp}${counter}`;
   }
 
   /**
@@ -181,6 +262,218 @@ export class Scratchpad {
     }
 
     return clearCount;
+  }
+
+  /**
+   * Apply a compaction plan from ContextCompactor.
+   * Updates tiers and archives cleared results for later retrieval.
+   */
+  applyCompactionPlan(plan: CompactionPlan): {
+    fullCount: number;
+    compactCount: number;
+    clearedCount: number;
+  } {
+    // Update results to keep full
+    for (const scored of plan.keepFull) {
+      const resultId = (scored.entry as TieredToolResult).resultId;
+      if (resultId && this.tieredResults.has(resultId)) {
+        const result = this.tieredResults.get(resultId)!;
+        result.tier = 'full';
+        result.importanceScore = scored.score;
+      }
+    }
+
+    // Update results to keep compact
+    for (const scored of plan.keepCompact) {
+      const resultId = (scored.entry as TieredToolResult).resultId;
+      if (resultId && this.tieredResults.has(resultId)) {
+        const result = this.tieredResults.get(resultId)!;
+        result.tier = 'compact';
+        result.compact = scored.compact;
+        result.importanceScore = scored.score;
+      }
+    }
+
+    // Clear results (archive for later retrieval)
+    for (const scored of plan.clear) {
+      const resultId = (scored.entry as TieredToolResult).resultId;
+      if (resultId && this.tieredResults.has(resultId)) {
+        const result = this.tieredResults.get(resultId)!;
+        result.tier = 'cleared';
+        result.importanceScore = scored.score;
+
+        // Archive the full result for later retrieval
+        this.archivedResults.set(resultId, {
+          type: 'tool_result',
+          tool: result.tool,
+          args: result.args,
+          result: result.result,
+          durationMs: result.durationMs,
+          timestamp: result.timestamp,
+        });
+      }
+    }
+
+    return {
+      fullCount: plan.keepFull.length,
+      compactCount: plan.keepCompact.length,
+      clearedCount: plan.clear.length,
+    };
+  }
+
+  /**
+   * Get a full result by ID (works for both active and archived results).
+   */
+  getResultById(resultId: string): ToolResultEntry | null {
+    // Check active tiered results first
+    const tiered = this.tieredResults.get(resultId);
+    if (tiered) {
+      return {
+        type: 'tool_result',
+        tool: tiered.tool,
+        args: tiered.args,
+        result: tiered.result,
+        durationMs: tiered.durationMs,
+        timestamp: tiered.timestamp,
+      };
+    }
+
+    // Check archived results
+    const archived = this.archivedResults.get(resultId);
+    if (archived) {
+      return archived;
+    }
+
+    return null;
+  }
+
+  /**
+   * Check if a result ID exists.
+   */
+  hasResult(resultId: string): boolean {
+    return this.tieredResults.has(resultId) || this.archivedResults.has(resultId);
+  }
+
+  /**
+   * Get all result IDs.
+   */
+  getResultIds(): string[] {
+    return [
+      ...Array.from(this.tieredResults.keys()),
+      ...Array.from(this.archivedResults.keys()),
+    ];
+  }
+
+  /**
+   * Get tiered tool results by tier.
+   */
+  getResultsByTier(tier: StorageTier): TieredToolResult[] {
+    return Array.from(this.tieredResults.values()).filter(r => r.tier === tier);
+  }
+
+  /**
+   * Get all tiered results for context building.
+   */
+  getTieredResults(): TieredToolResult[] {
+    return Array.from(this.tieredResults.values());
+  }
+
+  /**
+   * Build context string from tiered results.
+   * Includes full results, compact summaries, and notes about cleared results.
+   */
+  buildTieredContext(): string {
+    const sections: string[] = [];
+    const fullResults = this.getResultsByTier('full');
+    const compactResults = this.getResultsByTier('compact');
+    const clearedCount = this.getResultsByTier('cleared').length;
+
+    // Extract auto-generated visualizations and display them FIRST
+    const autoVisualizations: string[] = [];
+    for (const result of fullResults) {
+      if (result.result && typeof result.result === 'object') {
+        const resultObj = result.result as Record<string, unknown>;
+        if (resultObj.autoVisualization) {
+          autoVisualizations.push(resultObj.autoVisualization as string);
+        }
+      }
+    }
+
+    if (autoVisualizations.length > 0) {
+      for (const viz of autoVisualizations) {
+        sections.push(viz);
+        sections.push('');
+      }
+    }
+
+    // Full results
+    if (fullResults.length > 0) {
+      sections.push('## Tool Results\n');
+      for (const result of fullResults) {
+        sections.push(`### ${result.tool} [${result.resultId}]`);
+        sections.push(`Args: ${JSON.stringify(result.args)}`);
+        const resultStr = typeof result.result === 'string'
+          ? result.result
+          : JSON.stringify(result.result, null, 2);
+        sections.push(resultStr.slice(0, 3000)); // Limit size per result
+        sections.push('');
+      }
+    }
+
+    // Compact results
+    if (compactResults.length > 0) {
+      sections.push('\n## Tool Results (Summary)\n');
+      for (const result of compactResults) {
+        if (result.compact) {
+          sections.push(`- [${result.resultId}] ${result.tool}: ${result.compact.summary}`);
+          if (result.compact.services.length > 0) {
+            sections.push(`  Services: ${result.compact.services.slice(0, 5).join(', ')}`);
+          }
+        } else {
+          const preview = typeof result.result === 'string'
+            ? result.result.slice(0, 100)
+            : JSON.stringify(result.result).slice(0, 100);
+          sections.push(`- [${result.resultId}] ${result.tool}: ${preview}...`);
+        }
+      }
+    }
+
+    // Note about cleared results
+    if (clearedCount > 0) {
+      sections.push(`\n_${clearedCount} older result(s) cleared. Use get_full_result with result ID to retrieve._`);
+    }
+
+    return sections.join('\n');
+  }
+
+  /**
+   * Get compact result for a specific result ID.
+   */
+  getCompactResult(resultId: string): CompactToolResult | null {
+    const result = this.tieredResults.get(resultId);
+    return result?.compact || null;
+  }
+
+  /**
+   * Set compact summary for a result.
+   */
+  setCompactResult(resultId: string, compact: CompactToolResult): void {
+    const result = this.tieredResults.get(resultId);
+    if (result) {
+      result.compact = compact;
+    }
+  }
+
+  /**
+   * Get count of results by tier.
+   */
+  getResultCounts(): { full: number; compact: number; cleared: number; archived: number } {
+    return {
+      full: this.getResultsByTier('full').length,
+      compact: this.getResultsByTier('compact').length,
+      cleared: this.getResultsByTier('cleared').length,
+      archived: this.archivedResults.size,
+    };
   }
 
   /**

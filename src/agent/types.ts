@@ -153,9 +153,11 @@ export interface ToolParameters {
 
 export interface ToolParameterProperty {
   type: string;
-  description: string;
+  description?: string;
   enum?: string[];
-  items?: { type: string; enum?: string[] };
+  items?: ToolParameterProperty;
+  properties?: Record<string, ToolParameterProperty>;
+  required?: string[];
 }
 
 // Scratchpad entry types

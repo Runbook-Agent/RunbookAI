@@ -32,6 +32,13 @@ export interface AWSServiceDefinition {
   listOperation: AWSOperation;
   // Describe operation to get details
   describeOperation?: AWSOperation;
+  // Secondary operations that require parameters from primary resources
+  secondaryOperations?: Array<AWSOperation & {
+    // Which field from the primary resource provides the required parameter
+    requiresParam: string;
+    // Name of the parameter in the command
+    paramName: string;
+  }>;
   // How to format each resource for display
   resourceFormatter: {
     idField: string;
@@ -184,10 +191,31 @@ export const AWS_SERVICES: AWSServiceDefinition[] = [
       resultPath: 'apps',
       pagination: { tokenParam: 'nextToken', tokenPath: 'nextToken', resultsPath: 'apps' },
     },
+    secondaryOperations: [
+      {
+        name: 'listBranches',
+        description: 'List branches for an Amplify app',
+        command: 'ListBranchesCommand',
+        resultPath: 'branches',
+        requiresParam: 'appId',
+        paramName: 'appId',
+        pagination: { tokenParam: 'nextToken', tokenPath: 'nextToken', resultsPath: 'branches' },
+      },
+      {
+        name: 'listJobs',
+        description: 'List deployment jobs for an Amplify branch (shows deployment history)',
+        command: 'ListJobsCommand',
+        resultPath: 'jobSummaries',
+        requiresParam: 'appId',
+        paramName: 'appId',
+        // Note: also requires branchName, which we'll need to handle specially
+        pagination: { tokenParam: 'nextToken', tokenPath: 'nextToken', resultsPath: 'jobSummaries' },
+      },
+    ],
     resourceFormatter: {
       idField: 'appId',
       nameField: 'name',
-      additionalFields: ['repository', 'platform', 'defaultDomain'],
+      additionalFields: ['repository', 'platform', 'defaultDomain', 'updateTime'],
     },
   },
   {

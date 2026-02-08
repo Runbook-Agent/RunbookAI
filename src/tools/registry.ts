@@ -637,14 +637,21 @@ export const cloudwatchAlarmsTool = defineTool(
       const state = args.state as string;
       const region = args.region as string | undefined;
 
+      let alarms;
       if (state === 'all' || !state) {
-        const alarms = await getActiveAlarms(region);
-        return { alarms, count: alarms.length };
+        alarms = await getActiveAlarms(region);
+      } else {
+        const allAlarms = await getActiveAlarms(region);
+        alarms = allAlarms.filter((a) => a.stateValue === state);
       }
 
-      const alarms = await getActiveAlarms(region);
-      const filtered = alarms.filter((a) => a.stateValue === state);
-      return { alarms: filtered, count: filtered.length };
+      return {
+        alarms,
+        count: alarms.length,
+        visualizationHint: alarms.length > 0
+          ? 'ALARM DATA: You MUST call visualize_metrics to display this data. Use chart_type="sparkline" with the recentDatapoints values, or chart_type="gauge" for current state. Do this BEFORE providing text.'
+          : undefined,
+      };
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Unknown error' };
     }
@@ -1056,10 +1063,217 @@ export const datadogTool = defineTool(
   }
 );
 
+/**
+ * Cross-platform date helper for CLI commands
+ *
+ * Replaces shell date expressions with actual dates calculated in JavaScript.
+ * Handles both GNU date syntax (Linux) and BSD date syntax (macOS).
+ */
+function preprocessDateExpressions(command: string): string {
+  let processedCommand = command;
+
+  // Helper to format date as YYYY-MM-DD
+  const formatDate = (date: Date): string => {
+    return date.toISOString().split('T')[0];
+  };
+
+  // Pattern: $(date -d '30 days ago' +%Y-%m-%d) or $(date -d "30 days ago" +%Y-%m-%d)
+  // GNU date syntax
+  const gnuDatePattern = /\$\(date\s+-d\s+['"]?(\d+)\s+(day|days|week|weeks|month|months)\s+ago['"]?\s+\+%Y-%m-%d\)/gi;
+  processedCommand = processedCommand.replace(gnuDatePattern, (_, amount, unit) => {
+    const date = new Date();
+    const num = parseInt(amount, 10);
+    if (unit.startsWith('day')) {
+      date.setDate(date.getDate() - num);
+    } else if (unit.startsWith('week')) {
+      date.setDate(date.getDate() - (num * 7));
+    } else if (unit.startsWith('month')) {
+      date.setMonth(date.getMonth() - num);
+    }
+    return formatDate(date);
+  });
+
+  // Pattern: $(date -v-30d +%Y-%m-%d) - BSD/macOS date syntax
+  const bsdDatePattern = /\$\(date\s+-v-(\d+)([dwmy])\s+\+%Y-%m-%d\)/gi;
+  processedCommand = processedCommand.replace(bsdDatePattern, (_, amount, unit) => {
+    const date = new Date();
+    const num = parseInt(amount, 10);
+    switch (unit.toLowerCase()) {
+      case 'd': date.setDate(date.getDate() - num); break;
+      case 'w': date.setDate(date.getDate() - (num * 7)); break;
+      case 'm': date.setMonth(date.getMonth() - num); break;
+      case 'y': date.setFullYear(date.getFullYear() - num); break;
+    }
+    return formatDate(date);
+  });
+
+  // Pattern: $(date +%Y-%m-%d) - current date
+  const currentDatePattern = /\$\(date\s+\+%Y-%m-%d\)/gi;
+  processedCommand = processedCommand.replace(currentDatePattern, () => {
+    return formatDate(new Date());
+  });
+
+  // Pattern: $(date -d 'yesterday' +%Y-%m-%d)
+  const yesterdayPattern = /\$\(date\s+-d\s+['"]?yesterday['"]?\s+\+%Y-%m-%d\)/gi;
+  processedCommand = processedCommand.replace(yesterdayPattern, () => {
+    const date = new Date();
+    date.setDate(date.getDate() - 1);
+    return formatDate(date);
+  });
+
+  // Pattern: $(date -d 'last month' +%Y-%m-%d)
+  const lastMonthPattern = /\$\(date\s+-d\s+['"]?last\s+month['"]?\s+\+%Y-%m-%d\)/gi;
+  processedCommand = processedCommand.replace(lastMonthPattern, () => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 1);
+    return formatDate(date);
+  });
+
+  // Pattern: $(date -d 'first day of last month' +%Y-%m-%d)
+  const firstDayLastMonthPattern = /\$\(date\s+-d\s+['"]?first\s+day\s+of\s+last\s+month['"]?\s+\+%Y-%m-%d\)/gi;
+  processedCommand = processedCommand.replace(firstDayLastMonthPattern, () => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 1);
+    date.setDate(1);
+    return formatDate(date);
+  });
+
+  return processedCommand;
+}
+
+/**
+ * AWS CLI Fallback Tool
+ *
+ * When SDK-based tools don't support a specific operation,
+ * this tool allows running AWS CLI commands directly.
+ */
+export const awsCliTool = defineTool(
+  'aws_cli',
+  `Execute AWS CLI commands directly. Use this as a FALLBACK when aws_query doesn't support the specific operation you need.
+
+   Examples:
+   - "aws amplify list-jobs --app-id abc123 --branch-name main --region us-east-1"
+   - "aws ecs describe-tasks --cluster my-cluster --tasks arn:aws:ecs:..."
+   - "aws logs get-log-events --log-group-name /aws/lambda/my-func --log-stream-name ..."
+
+   IMPORTANT:
+   - Only use for READ operations (list, describe, get)
+   - Do NOT use for mutations (create, update, delete, put) - use aws_mutate instead
+   - Requires user approval before execution
+   - Always include --region flag`,
+  {
+    type: 'object',
+    properties: {
+      command: {
+        type: 'string',
+        description: 'The full AWS CLI command to execute (must start with "aws")',
+      },
+      reason: {
+        type: 'string',
+        description: 'Why this CLI command is needed (helps user understand the request)',
+      },
+    },
+    required: ['command', 'reason'],
+  },
+  async (args) => {
+    const rawCommand = args.command as string;
+    const reason = args.reason as string;
+
+    // Validate command starts with 'aws'
+    if (!rawCommand.trim().startsWith('aws ')) {
+      return { error: 'Command must start with "aws"' };
+    }
+
+    // Preprocess date expressions for cross-platform compatibility
+    const command = preprocessDateExpressions(rawCommand);
+
+    // Block mutation commands
+    const mutationKeywords = ['create', 'update', 'delete', 'put', 'terminate', 'stop', 'start', 'modify', 'remove', 'set'];
+    const commandLower = command.toLowerCase();
+    for (const keyword of mutationKeywords) {
+      if (commandLower.includes(` ${keyword}-`) || commandLower.includes(` ${keyword} `)) {
+        return {
+          error: `Mutation commands are not allowed via aws_cli. Use aws_mutate instead.`,
+          blockedKeyword: keyword,
+        };
+      }
+    }
+
+    // Execute the command
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+
+    try {
+      const { stdout, stderr } = await execAsync(command, {
+        timeout: 30000, // 30 second timeout
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+      });
+
+      // Try to parse as JSON for better formatting
+      let result: unknown;
+      try {
+        result = JSON.parse(stdout);
+      } catch {
+        result = stdout.trim();
+      }
+
+      // Auto-generate visualization for cost data
+      let autoVisualization: string | undefined;
+      const resultStr = JSON.stringify(result);
+
+      if (command.includes('ce get-cost') || resultStr.includes('BlendedCost') || resultStr.includes('UnblendedCost')) {
+        // Extract cost values and generate chart automatically
+        try {
+          const costResult = result as { ResultsByTime?: Array<{ TimePeriod: { Start: string }; Total: { BlendedCost?: { Amount: string }; UnblendedCost?: { Amount: string } } }> };
+          if (costResult.ResultsByTime && costResult.ResultsByTime.length > 0) {
+            const values = costResult.ResultsByTime.map(r => {
+              const amount = r.Total.BlendedCost?.Amount || r.Total.UnblendedCost?.Amount || '0';
+              return parseFloat(amount);
+            });
+            const labels = costResult.ResultsByTime.map(r => {
+              const date = new Date(r.TimePeriod.Start);
+              return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            });
+
+            // Generate the chart
+            const chart = generateLineChart(values, { title: 'AWS Monthly Cost (USD)' });
+            autoVisualization = `\n## Cost Visualization\n\n${chart}\n\nMonths: ${labels.join(' → ')}`;
+          }
+        } catch {
+          // If visualization fails, continue without it
+        }
+      }
+
+      return {
+        success: true,
+        command,
+        originalCommand: rawCommand !== command ? rawCommand : undefined,
+        datePreprocessed: rawCommand !== command,
+        reason,
+        output: result,
+        stderr: stderr || undefined,
+        autoVisualization,
+      };
+    } catch (error) {
+      const execError = error as { message: string; stderr?: string; code?: number };
+      return {
+        error: execError.message,
+        stderr: execError.stderr,
+        exitCode: execError.code,
+        command,
+        originalCommand: rawCommand !== command ? rawCommand : undefined,
+        hint: 'Make sure AWS CLI is installed and configured with valid credentials',
+      };
+    }
+  }
+);
+
 // Register default tools
 toolRegistry.registerCategory('aws', 'AWS Cloud Operations', [
   awsQueryTool,
   awsMutateTool,
+  awsCliTool,
   cloudwatchAlarmsTool,
   cloudwatchLogsTool,
 ]);
@@ -1975,3 +2189,637 @@ toolRegistry.registerCategory('incident', 'Incident Management', [
 ]);
 
 toolRegistry.registerCategory('skills', 'Skill Invocation', [skillTool]);
+
+// ============================================================================
+// Context Engineering Tools
+// ============================================================================
+
+/**
+ * Scratchpad reference for get_full_result tool.
+ * Set by the agent at runtime.
+ */
+let activeScratchpad: {
+  getResultById: (id: string) => unknown;
+  hasResult: (id: string) => boolean;
+  getResultIds: () => string[];
+} | null = null;
+
+/**
+ * Set the active scratchpad for the get_full_result tool.
+ */
+export function setActiveScratchpad(scratchpad: typeof activeScratchpad): void {
+  activeScratchpad = scratchpad;
+}
+
+/**
+ * Get Full Result Tool
+ *
+ * Retrieves full tool result by ID for drill-down after context compaction.
+ */
+export const getFullResultTool = defineTool(
+  'get_full_result',
+  `Retrieve the full result of a previous tool call by its result ID.
+
+   Use when:
+   - You need more details from a previously summarized result
+   - A result was cleared from context due to token limits
+   - You need to verify or examine raw data from an earlier tool call
+
+   Result IDs look like: "aws-1a2b3c" or "cw_-4d5e6f"
+
+   Available result IDs are shown when results are summarized or cleared.`,
+  {
+    type: 'object',
+    properties: {
+      result_id: {
+        type: 'string',
+        description: 'The result ID to retrieve (e.g., "aws-1a2b3c")',
+      },
+    },
+    required: ['result_id'],
+  },
+  async (args) => {
+    const resultId = args.result_id as string;
+
+    if (!activeScratchpad) {
+      return {
+        error: 'Scratchpad not available',
+        hint: 'This tool is only available during agent execution',
+      };
+    }
+
+    if (!activeScratchpad.hasResult(resultId)) {
+      const availableIds = activeScratchpad.getResultIds();
+      return {
+        error: `Result ID "${resultId}" not found`,
+        availableIds: availableIds.slice(-10), // Show last 10 IDs
+        hint: 'Result IDs are shown when results are summarized or cleared',
+      };
+    }
+
+    const fullResult = activeScratchpad.getResultById(resultId);
+
+    if (!fullResult) {
+      return {
+        error: `Failed to retrieve result for ID "${resultId}"`,
+      };
+    }
+
+    return {
+      resultId,
+      result: fullResult,
+      message: 'Full result retrieved successfully',
+    };
+  }
+);
+
+/**
+ * List Available Results Tool
+ *
+ * Lists all available result IDs that can be retrieved.
+ */
+export const listResultsTool = defineTool(
+  'list_results',
+  `List all available tool result IDs that can be retrieved with get_full_result.
+
+   Use when:
+   - You need to see what results are available for drill-down
+   - You want to check if a specific result is still available`,
+  {
+    type: 'object',
+    properties: {
+      limit: {
+        type: 'number',
+        description: 'Maximum number of IDs to return (default: 20)',
+      },
+    },
+  },
+  async (args) => {
+    const limit = (args.limit as number) || 20;
+
+    if (!activeScratchpad) {
+      return {
+        error: 'Scratchpad not available',
+        hint: 'This tool is only available during agent execution',
+      };
+    }
+
+    const allIds = activeScratchpad.getResultIds();
+
+    return {
+      resultIds: allIds.slice(-limit),
+      total: allIds.length,
+      showing: Math.min(limit, allIds.length),
+    };
+  }
+);
+
+toolRegistry.registerCategory('context', 'Context Management', [
+  getFullResultTool,
+  listResultsTool,
+]);
+
+// ============================================================================
+// Diagram & Visualization Tools
+// ============================================================================
+
+import {
+  mermaidToASCII,
+  parseFlowchart,
+  parseSequenceDiagram,
+  renderFlowchartASCII,
+  renderSequenceDiagramASCII,
+} from './diagram/mermaid';
+import {
+  generateLineChart,
+  generateBarChart,
+  generateSparkline,
+  generateGauge,
+  generateHistogram,
+  type TimeSeriesPoint,
+  type BarChartData,
+} from './diagram/charts';
+
+/**
+ * Generate Flowchart Tool
+ *
+ * Creates ASCII flowcharts for visualizing processes, workflows, and decision trees.
+ */
+export const generateFlowchartTool = defineTool(
+  'generate_flowchart',
+  `Generate an ASCII flowchart to visualize processes, workflows, or decision trees.
+
+   Use when:
+   - Explaining a process or workflow
+   - Visualizing system architecture
+   - Showing decision flows
+   - Illustrating data pipelines
+
+   The flowchart supports:
+   - Rectangular boxes for processes
+   - Diamond shapes for decisions
+   - Arrows showing flow direction
+   - Labels on connections`,
+  {
+    type: 'object',
+    properties: {
+      nodes: {
+        type: 'array',
+        description: 'List of nodes in the flowchart',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'Unique node identifier' },
+            label: { type: 'string', description: 'Display label for the node' },
+            shape: {
+              type: 'string',
+              enum: ['rect', 'diamond', 'circle', 'stadium'],
+              description: 'Node shape (rect for process, diamond for decision)',
+            },
+          },
+          required: ['id', 'label'],
+        },
+      },
+      edges: {
+        type: 'array',
+        description: 'Connections between nodes',
+        items: {
+          type: 'object',
+          properties: {
+            from: { type: 'string', description: 'Source node ID' },
+            to: { type: 'string', description: 'Target node ID' },
+            label: { type: 'string', description: 'Optional label for the connection' },
+          },
+          required: ['from', 'to'],
+        },
+      },
+      title: {
+        type: 'string',
+        description: 'Optional title for the flowchart',
+      },
+      direction: {
+        type: 'string',
+        enum: ['TD', 'LR', 'BT', 'RL'],
+        description: 'Flow direction: TD (top-down), LR (left-right), etc.',
+      },
+    },
+    required: ['nodes', 'edges'],
+  },
+  async (args) => {
+    const nodes = args.nodes as Array<{ id: string; label: string; shape?: string }>;
+    const edges = args.edges as Array<{ from: string; to: string; label?: string }>;
+    const title = args.title as string | undefined;
+    const direction = (args.direction as 'TD' | 'LR' | 'BT' | 'RL') || 'TD';
+
+    // Build flowchart data
+    const nodeMap = new Map<string, { id: string; label: string; shape: 'rect' | 'diamond' | 'circle' | 'stadium' }>();
+    for (const node of nodes) {
+      nodeMap.set(node.id, {
+        id: node.id,
+        label: node.label,
+        shape: (node.shape as 'rect' | 'diamond' | 'circle' | 'stadium') || 'rect',
+      });
+    }
+
+    const flowchartEdges = edges.map((e) => ({
+      from: e.from,
+      to: e.to,
+      label: e.label,
+      style: 'solid' as const,
+      arrow: 'normal' as const,
+    }));
+
+    const flowchartData = {
+      direction,
+      nodes: nodeMap,
+      edges: flowchartEdges,
+    };
+
+    const diagram = renderFlowchartASCII(flowchartData);
+
+    return {
+      type: 'flowchart',
+      title,
+      diagram: '\n' + (title ? `${title}\n${'─'.repeat(title.length)}\n\n` : '') + diagram,
+    };
+  }
+);
+
+/**
+ * Generate Sequence Diagram Tool
+ *
+ * Creates ASCII sequence diagrams for showing service interactions over time.
+ */
+export const generateSequenceDiagramTool = defineTool(
+  'generate_sequence_diagram',
+  `Generate an ASCII sequence diagram to show service interactions over time.
+
+   Use when:
+   - Explaining how services communicate
+   - Documenting API call flows
+   - Visualizing request/response patterns
+   - Showing message passing between components`,
+  {
+    type: 'object',
+    properties: {
+      participants: {
+        type: 'array',
+        description: 'List of participants (services, actors, etc.)',
+        items: { type: 'string' },
+      },
+      messages: {
+        type: 'array',
+        description: 'Messages between participants in order',
+        items: {
+          type: 'object',
+          properties: {
+            from: { type: 'string', description: 'Sender participant' },
+            to: { type: 'string', description: 'Receiver participant' },
+            message: { type: 'string', description: 'Message content' },
+            type: {
+              type: 'string',
+              enum: ['solid', 'dotted', 'async'],
+              description: 'Line style (solid for sync, dotted for response, async for async)',
+            },
+          },
+          required: ['from', 'to', 'message'],
+        },
+      },
+      title: {
+        type: 'string',
+        description: 'Optional title for the diagram',
+      },
+    },
+    required: ['participants', 'messages'],
+  },
+  async (args) => {
+    const participants = args.participants as string[];
+    const messages = args.messages as Array<{
+      from: string;
+      to: string;
+      message: string;
+      type?: string;
+    }>;
+    const title = args.title as string | undefined;
+
+    const sequenceData = {
+      participants,
+      messages: messages.map((m) => ({
+        from: m.from,
+        to: m.to,
+        message: m.message,
+        type: (m.type as 'solid' | 'dotted' | 'async') || 'solid',
+      })),
+    };
+
+    const diagram = renderSequenceDiagramASCII(sequenceData);
+
+    return {
+      type: 'sequence',
+      title,
+      diagram: '\n' + (title ? `${title}\n${'─'.repeat(title.length)}\n\n` : '') + diagram,
+    };
+  }
+);
+
+/**
+ * Generate Architecture Diagram Tool
+ *
+ * Creates ASCII diagrams showing system components and relationships.
+ */
+export const generateArchitectureDiagramTool = defineTool(
+  'generate_architecture_diagram',
+  `Generate an ASCII architecture diagram showing system components and relationships.
+
+   Use when:
+   - Explaining system architecture
+   - Showing infrastructure components
+   - Visualizing service dependencies
+   - Documenting deployment topology`,
+  {
+    type: 'object',
+    properties: {
+      components: {
+        type: 'array',
+        description: 'System components',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'Unique component ID' },
+            name: { type: 'string', description: 'Component name' },
+            type: {
+              type: 'string',
+              enum: ['service', 'database', 'queue', 'cache', 'external', 'load_balancer'],
+              description: 'Component type',
+            },
+          },
+          required: ['id', 'name'],
+        },
+      },
+      connections: {
+        type: 'array',
+        description: 'Connections between components',
+        items: {
+          type: 'object',
+          properties: {
+            from: { type: 'string', description: 'Source component ID' },
+            to: { type: 'string', description: 'Target component ID' },
+            label: { type: 'string', description: 'Connection label (e.g., HTTP, TCP, etc.)' },
+          },
+          required: ['from', 'to'],
+        },
+      },
+      title: {
+        type: 'string',
+        description: 'Diagram title',
+      },
+    },
+    required: ['components', 'connections'],
+  },
+  async (args) => {
+    const components = args.components as Array<{ id: string; name: string; type?: string }>;
+    const connections = args.connections as Array<{ from: string; to: string; label?: string }>;
+    const title = args.title as string | undefined;
+
+    // Map component types to shapes
+    const typeToShape: Record<string, 'rect' | 'diamond' | 'circle' | 'stadium'> = {
+      service: 'rect',
+      database: 'stadium',
+      queue: 'stadium',
+      cache: 'circle',
+      external: 'diamond',
+      load_balancer: 'diamond',
+    };
+
+    const nodeMap = new Map<string, { id: string; label: string; shape: 'rect' | 'diamond' | 'circle' | 'stadium' }>();
+    for (const comp of components) {
+      nodeMap.set(comp.id, {
+        id: comp.id,
+        label: comp.name,
+        shape: typeToShape[comp.type || 'service'] || 'rect',
+      });
+    }
+
+    const edges = connections.map((c) => ({
+      from: c.from,
+      to: c.to,
+      label: c.label,
+      style: 'solid' as const,
+      arrow: 'normal' as const,
+    }));
+
+    const flowchartData = {
+      direction: 'LR' as const,
+      nodes: nodeMap,
+      edges,
+    };
+
+    const diagram = renderFlowchartASCII(flowchartData);
+
+    // Add legend for component types
+    const legend = `
+Legend:
+  ┌────┐ Service    ╭────╮ Database/Queue
+  └────┘            ╰────╯
+     ◆   External      ○   Cache
+`;
+
+    return {
+      type: 'architecture',
+      title,
+      diagram: '\n' + (title ? `${title}\n${'─'.repeat(title.length)}\n\n` : '') + diagram + legend,
+    };
+  }
+);
+
+/**
+ * Visualize Metrics Tool
+ *
+ * Creates ASCII charts for time-series data and metrics visualization.
+ */
+export const visualizeMetricsTool = defineTool(
+  'visualize_metrics',
+  `Generate ASCII charts to visualize metrics and time-series data.
+
+   Use when:
+   - Showing trends over time
+   - Comparing values across categories
+   - Displaying distribution of data
+   - Visualizing system metrics (CPU, memory, etc.)
+
+   Supports:
+   - Line charts for trends
+   - Bar charts for comparisons
+   - Sparklines for compact inline display
+   - Gauges for percentage indicators
+   - Histograms for distributions`,
+  {
+    type: 'object',
+    properties: {
+      chart_type: {
+        type: 'string',
+        enum: ['line', 'bar', 'sparkline', 'gauge', 'histogram'],
+        description: 'Type of chart to generate',
+      },
+      data: {
+        type: 'array',
+        description: 'Data points for the chart (objects with value property)',
+        items: {
+          type: 'object',
+          properties: {
+            label: { type: 'string', description: 'Data point label (for bar charts)' },
+            value: { type: 'number', description: 'Numeric value' },
+            timestamp: { type: 'number', description: 'Unix timestamp (for line charts)' },
+          },
+          required: ['value'],
+        },
+      },
+      values: {
+        type: 'array',
+        description: 'Simple array of numbers for sparklines. Use this OR data, not both. Example: [0, 5, 10, 8, 12]',
+        items: { type: 'number' },
+      },
+      title: {
+        type: 'string',
+        description: 'Chart title',
+      },
+      max: {
+        type: 'number',
+        description: 'Maximum value (for gauge charts)',
+      },
+      thresholds: {
+        type: 'object',
+        properties: {
+          warn: { type: 'number', description: 'Warning threshold percentage' },
+          critical: { type: 'number', description: 'Critical threshold percentage' },
+        },
+        description: 'Thresholds for gauge charts',
+      },
+    },
+    required: ['chart_type'],
+  },
+  async (args) => {
+    const chartType = args.chart_type as string;
+    const data = (args.data || []) as Array<{ label?: string; value: number; timestamp?: number }>;
+    const simpleValues = args.values as number[] | undefined;
+    const title = args.title as string | undefined;
+    const max = args.max as number | undefined;
+    const thresholds = args.thresholds as { warn?: number; critical?: number } | undefined;
+
+    let chart: string;
+
+    switch (chartType) {
+      case 'line': {
+        const values = simpleValues || data.map((d) => d.value);
+        chart = generateLineChart(values, { title });
+        break;
+      }
+
+      case 'bar': {
+        const barData: BarChartData[] = data.map((d, i) => ({
+          label: d.label || `Item ${i + 1}`,
+          value: d.value,
+        }));
+        chart = generateBarChart(barData, { title });
+        break;
+      }
+
+      case 'sparkline': {
+        // Prefer simple 'values' array if provided, otherwise extract from 'data'
+        let values: number[];
+        if (simpleValues && Array.isArray(simpleValues)) {
+          values = simpleValues.map(v => typeof v === 'number' ? v : parseFloat(String(v)));
+        } else if (data && Array.isArray(data)) {
+          values = data.map((d) => {
+            if (typeof d === 'number') return d;
+            if (typeof d === 'object' && d !== null && 'value' in d) {
+              const val = (d as { value: unknown }).value;
+              return typeof val === 'number' ? val : parseFloat(String(val));
+            }
+            return NaN;
+          });
+        } else {
+          values = [];
+        }
+        chart = (title ? `${title}: ` : '') + generateSparkline(values);
+        break;
+      }
+
+      case 'gauge': {
+        const value = data[0]?.value || 0;
+        chart = generateGauge(value, max || 100, {
+          title,
+          thresholds: thresholds
+            ? { warn: thresholds.warn || 70, critical: thresholds.critical || 90 }
+            : undefined,
+        });
+        break;
+      }
+
+      case 'histogram': {
+        const values = data.map((d) => d.value);
+        chart = generateHistogram(values, 10, { title });
+        break;
+      }
+
+      default:
+        return { error: `Unknown chart type: ${chartType}` };
+    }
+
+    return {
+      type: chartType,
+      title,
+      chart: '\n' + chart,
+    };
+  }
+);
+
+/**
+ * Render Mermaid Diagram Tool
+ *
+ * Converts mermaid syntax directly to ASCII art.
+ */
+export const renderMermaidTool = defineTool(
+  'render_mermaid',
+  `Convert mermaid diagram syntax to ASCII art for terminal display.
+
+   Supports:
+   - Flowcharts (graph TD/LR)
+   - Sequence diagrams (sequenceDiagram)
+   - State diagrams (stateDiagram)
+
+   Use when you have existing mermaid syntax and want to display it.`,
+  {
+    type: 'object',
+    properties: {
+      code: {
+        type: 'string',
+        description: 'Mermaid diagram code',
+      },
+    },
+    required: ['code'],
+  },
+  async (args) => {
+    const code = args.code as string;
+
+    try {
+      const diagram = mermaidToASCII(code);
+      return {
+        diagram: '\n' + diagram,
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Failed to render mermaid diagram',
+        code,
+      };
+    }
+  }
+);
+
+toolRegistry.registerCategory('diagram', 'Diagrams & Visualization', [
+  generateFlowchartTool,
+  generateSequenceDiagramTool,
+  generateArchitectureDiagramTool,
+  visualizeMetricsTool,
+  renderMermaidTool,
+]);

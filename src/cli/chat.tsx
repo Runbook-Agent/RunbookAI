@@ -5,7 +5,7 @@
  * Maintains conversation history and context across messages.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Text, Box, useInput, useApp, Static } from 'ink';
 import Spinner from 'ink-spinner';
 import { Agent } from '../agent/agent';
@@ -13,12 +13,31 @@ import { createLLMClient } from '../model/llm';
 import { toolRegistry } from '../tools/registry';
 import { loadConfig, validateConfig } from '../utils/config';
 import type { AgentEvent } from '../agent/types';
+import { MarkdownText } from './components/markdown';
+
+const LOGO = `
+  ____              _                 _       _    ___
+ |  _ \\ _   _ _ __ | |__   ___   ___ | | __  / \\  |_ _|
+ | |_) | | | | '_ \\| '_ \\ / _ \\ / _ \\| |/ / / _ \\  | |
+ |  _ <| |_| | | | | |_) | (_) | (_) |   < / ___ \\ | |
+ |_| \\_\\\\__,_|_| |_|_.__/ \\___/ \\___/|_|\\_/_/   \\_\\___|
+
+              AI-Powered SRE Assistant
+`;
+
+interface LoadedConfig {
+  llmProvider: string;
+  llmModel: string;
+  awsRegions: string[];
+  awsDefaultRegion: string;
+}
 
 interface Message {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'header';
   content: string;
   timestamp: Date;
   toolCalls?: Array<{ tool: string; duration: number }>;
+  config?: LoadedConfig;
 }
 
 interface ChatState {
@@ -53,6 +72,10 @@ export function ChatInterface() {
         return;
       }
 
+      // Extract AWS config
+      const awsRegions = config.providers?.aws?.regions || ['us-east-1'];
+      const awsDefaultRegion = awsRegions[0] || 'us-east-1';
+
       const llm = createLLMClient({
         provider: config.llm.provider,
         model: config.llm.model,
@@ -68,15 +91,30 @@ export function ChatInterface() {
           maxHypothesisDepth: config.agent.maxHypothesisDepth,
           contextThresholdTokens: config.agent.contextThresholdTokens,
         },
+        promptConfig: {
+          awsRegions,
+          awsDefaultRegion,
+        },
       });
 
       setAgent(newAgent);
 
-      // Add welcome message
+      // Add header and welcome message
       setMessages([
         {
+          role: 'header',
+          content: LOGO,
+          timestamp: new Date(),
+          config: {
+            llmProvider: config.llm.provider,
+            llmModel: config.llm.model,
+            awsRegions,
+            awsDefaultRegion,
+          },
+        },
+        {
           role: 'system',
-          content: 'Welcome to Runbook Chat! Ask me anything about your infrastructure.\nType /help for commands, /exit to quit.',
+          content: 'Ready! Ask me anything about your infrastructure.\nType /help for commands, /exit to quit.',
           timestamp: new Date(),
         },
       ]);
@@ -227,6 +265,7 @@ Example queries:
     }
   }
 
+
   // Render config error
   if (configError) {
     return (
@@ -240,53 +279,79 @@ Example queries:
   // Render loading state
   if (!agent) {
     return (
-      <Box padding={1}>
-        <Text color="cyan">
-          <Spinner type="dots" />
-        </Text>
-        <Text> Initializing Runbook...</Text>
+      <Box flexDirection="column" padding={1}>
+        <Text color="cyan">{LOGO}</Text>
+        <Box>
+          <Text color="cyan">
+            <Spinner type="dots" />
+          </Text>
+          <Text> Initializing...</Text>
+        </Box>
       </Box>
     );
   }
 
   return (
     <Box flexDirection="column" padding={1}>
-      {/* Header */}
-      <Box marginBottom={1}>
-        <Text color="cyan" bold>Runbook Chat</Text>
-        <Text color="gray"> - Type /help for commands</Text>
-      </Box>
-
-      {/* Message history */}
+      {/* Message history (includes header as first item) */}
       <Static items={messages}>
         {(message, index) => (
           <Box key={index} flexDirection="column" marginBottom={1}>
+            {message.role === 'header' && message.config && (
+              <Box flexDirection="column">
+                <Text color="cyan">{message.content}</Text>
+                <Box flexDirection="column" marginBottom={1}>
+                  <Box>
+                    <Text color="gray">┌─ </Text>
+                    <Text color="white" bold>Configuration</Text>
+                    <Text color="gray"> ─────────────────────────</Text>
+                  </Box>
+                  <Box>
+                    <Text color="gray">│ </Text>
+                    <Text color="gray">AI Provider: </Text>
+                    <Text color="green">{message.config.llmProvider}</Text>
+                    <Text color="gray"> ({message.config.llmModel})</Text>
+                  </Box>
+                  <Box>
+                    <Text color="gray">│ </Text>
+                    <Text color="gray">AWS Region:  </Text>
+                    <Text color="green">{message.config.awsDefaultRegion}</Text>
+                    {message.config.awsRegions.length > 1 && (
+                      <Text color="gray"> (+{message.config.awsRegions.length - 1} more)</Text>
+                    )}
+                  </Box>
+                  <Box>
+                    <Text color="gray">└─────────────────────────────────────────</Text>
+                  </Box>
+                </Box>
+              </Box>
+            )}
             {message.role === 'user' && (
               <Box>
-                <Text color="green" bold>You: </Text>
+                <Text color="green" bold>{'❯ '}</Text>
                 <Text>{message.content}</Text>
               </Box>
             )}
             {message.role === 'assistant' && (
               <Box flexDirection="column">
                 <Box>
-                  <Text color="cyan" bold>Runbook: </Text>
+                  <Text color="cyan" bold>{'◆ Runbook'}</Text>
                 </Box>
                 {message.toolCalls && message.toolCalls.length > 0 && (
                   <Box marginLeft={2}>
                     <Text color="gray" dimColor>
-                      [{message.toolCalls.map((t) => `${t.tool} ${t.duration}ms`).join(', ')}]
+                      ⚡ {message.toolCalls.map((t) => `${t.tool} (${t.duration}ms)`).join(' → ')}
                     </Text>
                   </Box>
                 )}
                 <Box marginLeft={2}>
-                  <Text>{message.content}</Text>
+                  <MarkdownText content={message.content} />
                 </Box>
               </Box>
             )}
             {message.role === 'system' && (
               <Box>
-                <Text color="yellow">{message.content}</Text>
+                <Text color="yellow">{'ℹ '}{message.content}</Text>
               </Box>
             )}
           </Box>
@@ -317,9 +382,9 @@ Example queries:
       {/* Input */}
       {state.status === 'idle' && (
         <Box marginTop={1}>
-          <Text color="green" bold>{'> '}</Text>
+          <Text color="green" bold>{'❯ '}</Text>
           <Text>{input}</Text>
-          <Text color="gray">█</Text>
+          <Text color="cyan">▌</Text>
         </Box>
       )}
     </Box>
