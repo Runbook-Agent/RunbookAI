@@ -109,43 +109,54 @@ export async function saveConfig(
 
   await writeFile(configPath, yaml, 'utf-8');
 
-  // Also save main config.yaml with LLM settings if provided
-  if (llmConfig) {
-    const mainConfigPath = join(configDir, 'config.yaml');
-    // Use models supported by pi-ai
-    const llmModel = llmConfig.provider === 'anthropic'
-      ? 'claude-sonnet-4-20250514'
-      : llmConfig.provider === 'openai'
-        ? 'gpt-4o'
-        : 'llama3.1';
+  // Also save main config.yaml with LLM and AWS settings
+  const mainConfigPath = join(configDir, 'config.yaml');
 
-    // Use camelCase to match the config schema
-    const mainConfig = {
-      llm: {
-        provider: llmConfig.provider,
-        model: llmModel,
-        apiKey: llmConfig.apiKey || undefined,
-      },
-      agent: {
-        maxIterations: 10,
-        maxHypothesisDepth: 4,
-        contextThresholdTokens: 100000,
-      },
-      safety: {
-        requireApproval: ['high_risk', 'critical'],
-        maxMutationsPerSession: 5,
-        cooldownBetweenCriticalMs: 60000,
-      },
-    };
+  // Use models supported by pi-ai
+  const llmModel = llmConfig?.provider === 'anthropic'
+    ? 'claude-sonnet-4-20250514'
+    : llmConfig?.provider === 'openai'
+      ? 'gpt-4o'
+      : 'llama3.1';
 
-    // Remove apiKey if not provided (will fall back to env var)
-    if (!mainConfig.llm.apiKey) {
-      delete (mainConfig.llm as Record<string, unknown>).apiKey;
-    }
+  // Get regions from the service config
+  const regions = config.aws.accounts?.[0]?.regions || ['us-east-1'];
 
-    const mainYaml = stringifyYaml(mainConfig, { indent: 2 });
-    await writeFile(mainConfigPath, mainYaml, 'utf-8');
+  // Use camelCase to match the config schema
+  const mainConfig: Record<string, unknown> = {
+    llm: llmConfig ? {
+      provider: llmConfig.provider,
+      model: llmModel,
+      apiKey: llmConfig.apiKey || undefined,
+    } : {
+      provider: 'openai',
+      model: 'gpt-4o',
+    },
+    providers: {
+      aws: {
+        enabled: true,
+        regions: regions,
+      },
+    },
+    agent: {
+      maxIterations: 10,
+      maxHypothesisDepth: 4,
+      contextThresholdTokens: 100000,
+    },
+    safety: {
+      requireApproval: ['high_risk', 'critical'],
+      maxMutationsPerSession: 5,
+      cooldownBetweenCriticalMs: 60000,
+    },
+  };
+
+  // Remove apiKey if not provided (will fall back to env var)
+  if (llmConfig && !llmConfig.apiKey) {
+    delete ((mainConfig.llm as Record<string, unknown>).apiKey);
   }
+
+  const mainYaml = stringifyYaml(mainConfig, { indent: 2 });
+  await writeFile(mainConfigPath, mainYaml, 'utf-8');
 
   return configPath;
 }

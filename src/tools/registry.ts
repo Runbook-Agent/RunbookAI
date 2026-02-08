@@ -55,6 +55,21 @@ import {
   recordCriticalMutation,
   type MutationRequest,
 } from '../agent/approval';
+import { loadConfig } from '../utils/config';
+
+// Cached config for getting default regions
+let cachedDefaultRegion: string | null = null;
+
+async function getDefaultRegion(): Promise<string> {
+  if (cachedDefaultRegion) return cachedDefaultRegion;
+  try {
+    const config = await loadConfig();
+    cachedDefaultRegion = config.providers.aws.regions[0] || 'us-east-1';
+  } catch {
+    cachedDefaultRegion = 'us-east-1';
+  }
+  return cachedDefaultRegion;
+}
 
 export interface ToolCategory {
   name: string;
@@ -209,7 +224,7 @@ ${categoryList}
       },
       region: {
         type: 'string',
-        description: 'AWS region (defaults to us-east-1)',
+        description: 'AWS region (uses configured default if not specified)',
       },
       account: {
         type: 'string',
@@ -223,7 +238,8 @@ ${categoryList}
     required: ['query'],
   },
   async (args) => {
-    const region = args.region as string | undefined;
+    const defaultRegion = await getDefaultRegion();
+    const region = (args.region as string | undefined) || defaultRegion;
     const accountName = args.account as string | undefined;
     const limit = (args.limit as number) || 100;
     const requestedServices = args.services as string[] | undefined;
@@ -284,7 +300,7 @@ ${categoryList}
         results: output,
         errors: errors.length > 0 ? errors : undefined,
         _meta: {
-          region: region || 'us-east-1',
+          region: region,
           account: accountName || 'default',
         },
       };
