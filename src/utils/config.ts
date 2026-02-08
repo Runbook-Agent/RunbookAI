@@ -13,21 +13,23 @@ import { z } from 'zod';
  */
 // Providers supported by @mariozechner/pi-ai
 const LLMConfigSchema = z.object({
-  provider: z.enum([
-    'openai',
-    'anthropic',
-    'google',
-    'mistral',
-    'groq',
-    'xai',
-    'openrouter',
-    'bedrock',
-    'azure',
-    'vertex',
-    'cerebras',
-    'github',
-    'ollama',
-  ]).default('openai'),
+  provider: z
+    .enum([
+      'openai',
+      'anthropic',
+      'google',
+      'mistral',
+      'groq',
+      'xai',
+      'openrouter',
+      'bedrock',
+      'azure',
+      'vertex',
+      'cerebras',
+      'github',
+      'ollama',
+    ])
+    .default('openai'),
   model: z.string().default('gpt-4o'),
   apiKey: z.string().optional(),
 });
@@ -112,7 +114,7 @@ const KnowledgeConfigSchema = z.object({
 
 const SafetyConfigSchema = z.object({
   requireApproval: z
-    .array(z.enum(['low_risk', 'high_risk', 'critical']))
+    .array(z.enum(['low_risk', 'high_risk', 'low', 'medium', 'high', 'critical']))
     .default(['low_risk', 'high_risk', 'critical']),
   maxMutationsPerSession: z.number().default(10),
   cooldownBetweenCriticalMs: z.number().default(60000),
@@ -242,7 +244,9 @@ export function validateConfig(config: Config): string[] {
 
   const envKey = providerEnvKeys[config.llm.provider];
   if (envKey && !config.llm.apiKey && !process.env[envKey]) {
-    errors.push(`AI model not configured. Run \`runbook init\` to set up your LLM provider, or set the ${envKey} environment variable.`);
+    errors.push(
+      `AI model not configured. Run \`runbook init\` to set up your LLM provider, or set the ${envKey} environment variable.`
+    );
   }
 
   // Check AWS if enabled
@@ -258,6 +262,11 @@ export function validateConfig(config: Config): string[] {
   // Check OpsGenie if enabled
   if (config.incident.opsgenie.enabled && !config.incident.opsgenie.apiKey) {
     errors.push('OpsGenie enabled but no API key configured.');
+  }
+
+  // Check Slack if enabled
+  if (config.incident.slack.enabled && !config.incident.slack.botToken) {
+    errors.push('Slack enabled but no bot token configured.');
   }
 
   // Check Slack events gateway config

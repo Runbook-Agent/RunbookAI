@@ -17,7 +17,14 @@ import {
 vi.mock('child_process', () => {
   return {
     spawn: vi.fn(() => {
-      const proc = new EventEmitter();
+      const proc = new EventEmitter() as EventEmitter & {
+        stdout: EventEmitter;
+        stderr: EventEmitter;
+        stdin: {
+          write: ReturnType<typeof vi.fn>;
+          end: ReturnType<typeof vi.fn>;
+        };
+      };
       proc.stdout = new EventEmitter();
       proc.stderr = new EventEmitter();
       proc.stdin = {

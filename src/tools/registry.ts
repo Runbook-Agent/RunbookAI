@@ -59,11 +59,15 @@ import {
 import { executeMultiServiceQuery, getInstalledServices } from '../providers/aws/executor';
 import {
   classifyRisk,
-  requestApproval,
+  requestApprovalWithOptions,
   generateMutationId,
   checkCooldown,
-  recordCriticalMutation,
+  checkMutationLimit,
+  recordApprovedMutation,
+  normalizeApprovalRiskLevels,
   type MutationRequest,
+  type RiskLevel,
+  type ApprovalPolicyRisk,
 } from '../agent/approval';
 import { loadConfig } from '../utils/config';
 import { createKubernetesClient } from '../providers/kubernetes/client';
@@ -74,6 +78,7 @@ const execFileAsync = promisify(execFile);
 
 // Cached config for getting default regions
 let cachedDefaultRegion: string | null = null;
+const ALL_RISK_LEVELS: RiskLevel[] = ['low', 'medium', 'high', 'critical'];
 
 async function getDefaultRegion(): Promise<string> {
   if (cachedDefaultRegion) return cachedDefaultRegion;
@@ -84,6 +89,19 @@ async function getDefaultRegion(): Promise<string> {
     cachedDefaultRegion = 'us-east-1';
   }
   return cachedDefaultRegion;
+}
+
+async function getSafetySettings() {
+  const config = await loadConfig();
+  const requiredApprovalRisks = normalizeApprovalRiskLevels(
+    config.safety.requireApproval as ApprovalPolicyRisk[]
+  );
+  const autoApproveRisks = ALL_RISK_LEVELS.filter((risk) => !requiredApprovalRisks.includes(risk));
+
+  return {
+    config,
+    autoApproveRisks,
+  };
 }
 
 export interface ToolCategory {
@@ -567,13 +585,24 @@ export const awsMutateTool = defineTool(
     const description = args.description as string;
     const rollbackCommand = args.rollbackCommand as string | undefined;
     const estimatedImpact = args.estimatedImpact as string | undefined;
+    const { config, autoApproveRisks } = await getSafetySettings();
 
     // Classify risk level
     const riskLevel = classifyRisk(operation, resource);
 
+    // Check mutation budget
+    const limit = checkMutationLimit(config.safety.maxMutationsPerSession);
+    if (!limit.allowed) {
+      return {
+        status: 'blocked',
+        reason: `Session mutation limit reached (${config.safety.maxMutationsPerSession}).`,
+        riskLevel,
+      };
+    }
+
     // Check cooldown for critical operations
     if (riskLevel === 'critical') {
-      const cooldown = checkCooldown(operation, 60000);
+      const cooldown = checkCooldown(operation, config.safety.cooldownBetweenCriticalMs);
       if (!cooldown.allowed) {
         const remainingSecs = Math.ceil(cooldown.remainingMs / 1000);
         return {
@@ -596,8 +625,11 @@ export const awsMutateTool = defineTool(
       estimatedImpact,
     };
 
-    // Request approval
-    const approval = await requestApproval(request);
+    // Request approval based on configured safety policy
+    const approval = await requestApprovalWithOptions(request, {
+      useSlack: config.incident.slack.enabled,
+      autoApprove: autoApproveRisks,
+    });
 
     if (!approval.approved) {
       return {
@@ -608,10 +640,8 @@ export const awsMutateTool = defineTool(
       };
     }
 
-    // Record critical mutation for cooldown
-    if (riskLevel === 'critical') {
-      recordCriticalMutation();
-    }
+    // Record mutation for policy tracking
+    recordApprovedMutation(riskLevel);
 
     // Execute the operation
     try {
@@ -1106,11 +1136,27 @@ export const skillTool = defineTool(
       model: config.llm.model,
       apiKey: config.llm.apiKey,
     });
+    const safetyRequiredRisks = normalizeApprovalRiskLevels(
+      config.safety.requireApproval as ApprovalPolicyRisk[]
+    );
+    const safetyAutoApproveRisks = ALL_RISK_LEVELS.filter(
+      (risk) => !safetyRequiredRisks.includes(risk)
+    );
 
     const executor = new SkillExecutor({
       llm,
       onApprovalRequired: async (step) => {
         const riskLevel = skill.riskLevel || classifyRisk(step.action, skill.id);
+        const limit = checkMutationLimit(config.safety.maxMutationsPerSession);
+        if (!limit.allowed) {
+          return false;
+        }
+        if (riskLevel === 'critical') {
+          const cooldown = checkCooldown(step.action, config.safety.cooldownBetweenCriticalMs);
+          if (!cooldown.allowed) {
+            return false;
+          }
+        }
         const request: MutationRequest = {
           id: generateMutationId(),
           operation: step.action,
@@ -1121,7 +1167,13 @@ export const skillTool = defineTool(
           estimatedImpact: step.description,
         };
 
-        const approval = await requestApproval(request);
+        const approval = await requestApprovalWithOptions(request, {
+          useSlack: config.incident.slack.enabled,
+          autoApprove: safetyAutoApproveRisks,
+        });
+        if (approval.approved) {
+          recordApprovedMutation(riskLevel);
+        }
         return approval.approved;
       },
     });
@@ -1437,6 +1489,7 @@ export const awsCliTool = defineTool(
   async (args) => {
     const rawCommand = args.command as string;
     const reason = args.reason as string;
+    const { config } = await getSafetySettings();
 
     // Validate command starts with 'aws'
     if (!rawCommand.trim().startsWith('aws ')) {
@@ -1467,6 +1520,28 @@ export const awsCliTool = defineTool(
           blockedKeyword: keyword,
         };
       }
+    }
+
+    // Explicit approval is required before any shell execution.
+    const approvalRequest: MutationRequest = {
+      id: generateMutationId(),
+      operation: 'aws_cli:execute',
+      resource: 'aws-cli',
+      description: reason,
+      riskLevel: 'low',
+      parameters: { command },
+    };
+
+    const approval = await requestApprovalWithOptions(approvalRequest, {
+      useSlack: config.incident.slack.enabled,
+    });
+
+    if (!approval.approved) {
+      return {
+        status: 'rejected',
+        reason: 'AWS CLI command execution rejected by user',
+        command,
+      };
     }
 
     // Execute the command
@@ -2559,8 +2634,40 @@ export const opsgenieAcknowledgeAlertTool = defineTool(
         hint: 'Set OPSGENIE_API_KEY environment variable',
       };
     }
+    const { config, autoApproveRisks } = await getSafetySettings();
+    const riskLevel: RiskLevel = 'medium';
+    const limit = checkMutationLimit(config.safety.maxMutationsPerSession);
+    if (!limit.allowed) {
+      return {
+        status: 'blocked',
+        reason: `Session mutation limit reached (${config.safety.maxMutationsPerSession}).`,
+      };
+    }
 
     try {
+      const request: MutationRequest = {
+        id: generateMutationId(),
+        operation: 'opsgenie:acknowledgeAlert',
+        resource: args.alert_id as string,
+        description: `Acknowledge OpsGenie alert ${args.alert_id as string}`,
+        riskLevel,
+        parameters: {
+          note: args.note as string | undefined,
+        },
+      };
+      const approval = await requestApprovalWithOptions(request, {
+        useSlack: config.incident.slack.enabled,
+        autoApprove: autoApproveRisks,
+      });
+      if (!approval.approved) {
+        return {
+          status: 'rejected',
+          reason: 'Operation rejected by user',
+          alertId: args.alert_id as string,
+        };
+      }
+
+      recordApprovedMutation(riskLevel);
       const result = await acknowledgeOpsGenieAlert(
         args.alert_id as string,
         args.note as string | undefined
@@ -2604,8 +2711,40 @@ export const opsgenieCloseAlertTool = defineTool(
         hint: 'Set OPSGENIE_API_KEY environment variable',
       };
     }
+    const { config, autoApproveRisks } = await getSafetySettings();
+    const riskLevel: RiskLevel = 'high';
+    const limit = checkMutationLimit(config.safety.maxMutationsPerSession);
+    if (!limit.allowed) {
+      return {
+        status: 'blocked',
+        reason: `Session mutation limit reached (${config.safety.maxMutationsPerSession}).`,
+      };
+    }
 
     try {
+      const request: MutationRequest = {
+        id: generateMutationId(),
+        operation: 'opsgenie:closeAlert',
+        resource: args.alert_id as string,
+        description: `Close OpsGenie alert ${args.alert_id as string}`,
+        riskLevel,
+        parameters: {
+          note: args.note as string | undefined,
+        },
+      };
+      const approval = await requestApprovalWithOptions(request, {
+        useSlack: config.incident.slack.enabled,
+        autoApprove: autoApproveRisks,
+      });
+      if (!approval.approved) {
+        return {
+          status: 'rejected',
+          reason: 'Operation rejected by user',
+          alertId: args.alert_id as string,
+        };
+      }
+
+      recordApprovedMutation(riskLevel);
       const result = await closeOpsGenieAlert(
         args.alert_id as string,
         args.note as string | undefined

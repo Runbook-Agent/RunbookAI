@@ -16,6 +16,7 @@ import {
 } from '../tools/incident/slack';
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+export type ApprovalPolicyRisk = RiskLevel | 'low_risk' | 'high_risk';
 
 export interface MutationRequest {
   id: string;
@@ -59,9 +60,9 @@ export const RISK_DESCRIPTIONS: Record<RiskLevel, string> = {
  * Risk level colors for CLI display
  */
 export const RISK_COLORS: Record<RiskLevel, string> = {
-  low: '\x1b[32m',      // green
-  medium: '\x1b[33m',   // yellow
-  high: '\x1b[91m',     // light red
+  low: '\x1b[32m', // green
+  medium: '\x1b[33m', // yellow
+  high: '\x1b[91m', // light red
   critical: '\x1b[31m', // red
 };
 
@@ -166,9 +167,10 @@ export async function requestApproval(request: MutationRequest): Promise<Approva
   console.log(formatMutationRequest(request));
 
   // For critical operations, require typing 'yes' explicitly
-  const promptMessage = request.riskLevel === 'critical'
-    ? `Type 'yes' to approve, or 'no' to reject: `
-    : `Approve this operation? (y/n): `;
+  const promptMessage =
+    request.riskLevel === 'critical'
+      ? `Type 'yes' to approve, or 'no' to reject: `
+      : `Approve this operation? (y/n): `;
 
   const response = await prompt(promptMessage);
   const normalizedResponse = response.toLowerCase().trim();
@@ -208,11 +210,13 @@ function prompt(question: string): Promise<string> {
   });
 }
 
-
 /**
  * Check if auto-approval is allowed for an operation
  */
-export function canAutoApprove(riskLevel: RiskLevel, config?: { autoApprove?: RiskLevel[] }): boolean {
+export function canAutoApprove(
+  riskLevel: RiskLevel,
+  config?: { autoApprove?: RiskLevel[] }
+): boolean {
   const autoApproveLevels = config?.autoApprove || [];
   return autoApproveLevels.includes(riskLevel);
 }
@@ -221,6 +225,84 @@ export function canAutoApprove(riskLevel: RiskLevel, config?: { autoApprove?: Ri
  * Mutation cooldown tracker
  */
 const recentMutations: Map<string, Date> = new Map();
+let approvedMutationCount = 0;
+
+/**
+ * Normalize config-level approval risks (supports legacy names).
+ */
+export function normalizeApprovalRiskLevels(
+  levels: readonly ApprovalPolicyRisk[] = ['low_risk', 'high_risk', 'critical']
+): RiskLevel[] {
+  const normalized = new Set<RiskLevel>();
+
+  for (const level of levels) {
+    switch (level) {
+      case 'low_risk':
+        normalized.add('low');
+        break;
+      case 'high_risk':
+        // Legacy "high_risk" bucket included non-low mutations.
+        normalized.add('medium');
+        normalized.add('high');
+        break;
+      default:
+        normalized.add(level);
+        break;
+    }
+  }
+
+  return Array.from(normalized);
+}
+
+/**
+ * Check whether the given risk level requires explicit approval.
+ */
+export function requiresApprovalForRisk(
+  riskLevel: RiskLevel,
+  requiredLevels: readonly ApprovalPolicyRisk[] = ['low_risk', 'high_risk', 'critical']
+): boolean {
+  const normalized = normalizeApprovalRiskLevels(requiredLevels);
+  return normalized.includes(riskLevel);
+}
+
+/**
+ * Check session mutation budget.
+ */
+export function checkMutationLimit(maxMutationsPerSession: number = 10): {
+  allowed: boolean;
+  remaining: number;
+} {
+  const remaining = Math.max(0, maxMutationsPerSession - approvedMutationCount);
+  return {
+    allowed: approvedMutationCount < maxMutationsPerSession,
+    remaining,
+  };
+}
+
+/**
+ * Record an approved mutation for session safety tracking.
+ */
+export function recordApprovedMutation(riskLevel: RiskLevel): void {
+  approvedMutationCount += 1;
+  if (riskLevel === 'critical') {
+    recentMutations.set('critical', new Date());
+  }
+}
+
+/**
+ * Get current mutation count for this process.
+ */
+export function getApprovedMutationCount(): number {
+  return approvedMutationCount;
+}
+
+/**
+ * Reset in-memory mutation tracking.
+ */
+export function resetApprovalTracking(): void {
+  approvedMutationCount = 0;
+  recentMutations.clear();
+}
 
 /**
  * Check if enough time has passed since the last critical mutation
@@ -345,7 +427,9 @@ async function requestSlackApproval(
     await logApproval(request, result.approved, result.approvedBy);
     return result;
   } catch (error) {
-    console.log(`\x1b[31mSlack approval failed: ${error instanceof Error ? error.message : error}\x1b[0m`);
+    console.log(
+      `\x1b[31mSlack approval failed: ${error instanceof Error ? error.message : error}\x1b[0m`
+    );
     console.log('\x1b[33mFalling back to CLI approval.\x1b[0m');
     return requestApproval(request);
   }
@@ -357,10 +441,7 @@ async function requestSlackApproval(
  * In a full implementation, this would listen for webhook events.
  * For now, it checks a response file that could be written by a webhook handler.
  */
-async function waitForSlackApproval(
-  mutationId: string,
-  timeout: number
-): Promise<ApprovalResult> {
+async function waitForSlackApproval(mutationId: string, timeout: number): Promise<ApprovalResult> {
   const responseFile = join(process.cwd(), '.runbook', 'pending', `${mutationId}.json`);
   const startTime = Date.now();
   const pollInterval = 2000; // Check every 2 seconds
@@ -410,9 +491,10 @@ async function waitForSlackApproval(
  * Wait for CLI approval (as alternative to Slack)
  */
 async function waitForCLIApproval(request: MutationRequest): Promise<ApprovalResult> {
-  const promptMessage = request.riskLevel === 'critical'
-    ? `Type 'yes' to approve: `
-    : `Press Enter to approve, or 'n' to reject: `;
+  const promptMessage =
+    request.riskLevel === 'critical'
+      ? `Type 'yes' to approve: `
+      : `Press Enter to approve, or 'n' to reject: `;
 
   const response = await prompt(promptMessage);
   const normalizedResponse = response.toLowerCase().trim();

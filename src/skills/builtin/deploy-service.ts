@@ -9,10 +9,10 @@ import type { SkillDefinition } from '../types';
 export const deployServiceSkill: SkillDefinition = {
   id: 'deploy-service',
   name: 'Deploy Service',
-  description: 'Deploy a new version of a service with safety checks and rollback capability',
+  description: 'Deploy an ECS service with safety checks and rollback capability',
   version: '1.0.0',
-  tags: ['deployment', 'release', 'ecs', 'lambda'],
-  applicableServices: ['ecs', 'lambda', 'amplify'],
+  tags: ['deployment', 'release', 'ecs'],
+  applicableServices: ['ecs'],
   riskLevel: 'high',
 
   parameters: [
@@ -21,7 +21,7 @@ export const deployServiceSkill: SkillDefinition = {
       description: 'Type of service to deploy',
       type: 'string',
       required: true,
-      enum: ['ecs', 'lambda', 'amplify'],
+      enum: ['ecs'],
     },
     {
       name: 'service_name',
@@ -31,13 +31,13 @@ export const deployServiceSkill: SkillDefinition = {
     },
     {
       name: 'cluster',
-      description: 'ECS cluster name (for ECS deployments)',
+      description: 'ECS cluster name',
       type: 'string',
       required: false,
     },
     {
       name: 'image',
-      description: 'New container image or Lambda package (e.g., repo:tag)',
+      description: 'New container image (e.g., repo:tag)',
       type: 'string',
       required: false,
     },
@@ -127,14 +127,15 @@ Determine:
       action: 'aws_mutate',
       requiresApproval: true,
       parameters: {
-        operation: '{{service_type}}:UpdateService',
+        operation: 'ecs:UpdateService',
         resource: '{{service_name}}',
         parameters: {
           cluster: '{{cluster}}',
           forceNewDeployment: '{{force_new_deployment}}',
         },
         description: 'Deploy new version of {{service_name}}',
-        rollbackCommand: 'Rollback to previous task definition: {{steps.pre_check_state.result.taskDefinition}}',
+        rollbackCommand:
+          'Rollback to previous task definition: {{steps.pre_check_state.result.taskDefinition}}',
         estimatedImpact: 'Service will perform rolling update, may take 5-10 minutes',
       },
       onError: 'abort',

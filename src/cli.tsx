@@ -23,6 +23,7 @@ import type { AgentEvent } from './agent/types';
 import { skillRegistry } from './skills/registry';
 import { getRuntimeTools } from './cli/runtime-tools';
 import { startSlackGateway, executeSlackRequestWithRuntime } from './slack/gateway';
+import { createOrchestrator, type InvestigationEvent } from './agent/investigation-orchestrator';
 
 // Version from package.json
 const VERSION = '0.1.0';
@@ -162,9 +163,7 @@ function AgentUI({ query, incidentId, verbose }: AgentUIProps) {
                 💭 {event.content.slice(0, 100)}...
               </Text>
             )}
-            {verbose && event.type === 'tool_start' && (
-              <Text color="blue">→ {event.tool}</Text>
-            )}
+            {verbose && event.type === 'tool_start' && <Text color="blue">→ {event.tool}</Text>}
           </Box>
         )}
       </Static>
@@ -251,6 +250,122 @@ async function runSimple(query: string, incidentId?: string) {
   }
 }
 
+/**
+ * Structured investigation mode for incident command.
+ * Uses the dedicated investigation state machine + orchestrator pipeline.
+ */
+async function runStructuredInvestigation(incidentId: string, verbose: boolean) {
+  console.log(chalk.cyan('Runbook Investigation'));
+  console.log(chalk.gray('─'.repeat(40)));
+  console.log(`Incident: ${incidentId}`);
+  console.log();
+
+  const config = await loadConfig();
+  const configErrors = validateConfig(config);
+  if (configErrors.length > 0) {
+    console.error(chalk.red('Configuration errors:'));
+    configErrors.forEach((e) => console.error(chalk.red(`  - ${e}`)));
+    process.exit(1);
+  }
+
+  const llm = createLLMClient({
+    provider: config.llm.provider,
+    model: config.llm.model,
+    apiKey: config.llm.apiKey,
+  });
+  const runtimeTools = getRuntimeTools(config, toolRegistry.getAll());
+  const toolsByName = new Map(runtimeTools.map((tool) => [tool.name, tool]));
+
+  const orchestrator = createOrchestrator(
+    {
+      complete: async (prompt: string) => {
+        const response = await llm.chat(
+          'You are an SRE investigator. Return only valid JSON matching the requested schema.',
+          prompt
+        );
+        return response.content;
+      },
+    },
+    {
+      execute: async (toolName: string, parameters: Record<string, unknown>) => {
+        const tool = toolsByName.get(toolName);
+        if (!tool) {
+          throw new Error(`Tool not available in runtime: ${toolName}`);
+        }
+        return tool.execute(parameters);
+      },
+    },
+    {
+      incidentId,
+      maxIterations: config.agent.maxIterations,
+    }
+  );
+
+  orchestrator.on((event: InvestigationEvent) => {
+    switch (event.type) {
+      case 'phase_change':
+        console.log(chalk.blue(`→ Phase: ${event.phase}`));
+        break;
+      case 'query_executing':
+        if (verbose) {
+          console.log(chalk.gray(`  Querying: ${event.query.tool} (${event.query.queryType})`));
+        }
+        break;
+      case 'query_complete':
+        if (verbose) {
+          console.log(
+            chalk.green(`  ✓ Query complete: ${event.query.tool} (${event.query.queryType})`)
+          );
+        }
+        break;
+      case 'evidence_evaluated':
+        if (verbose) {
+          console.log(
+            chalk.yellow(
+              `  Evidence: ${event.evaluation.evidenceStrength} (confidence ${event.evaluation.confidence}%)`
+            )
+          );
+        }
+        break;
+      case 'error':
+        console.log(chalk.red(`✗ ${event.phase}: ${event.error.message}`));
+        break;
+    }
+  });
+
+  const query = `Investigate incident ${incidentId}. Identify the root cause with supporting evidence.`;
+  const result = await orchestrator.investigate(query);
+
+  console.log();
+  console.log(chalk.green('─'.repeat(40)));
+  if (result.rootCause) {
+    console.log(chalk.green(`Root Cause: ${result.rootCause}`));
+  } else {
+    console.log(chalk.yellow('Root Cause: not determined'));
+  }
+  if (result.confidence) {
+    console.log(chalk.gray(`Confidence: ${result.confidence}`));
+  }
+
+  if (result.remediationPlan?.steps?.length) {
+    console.log();
+    console.log(chalk.cyan('Remediation Plan:'));
+    result.remediationPlan.steps.forEach((step, index) => {
+      console.log(chalk.cyan(`  ${index + 1}. ${step.action}`));
+      console.log(
+        chalk.gray(
+          `     Risk: ${step.riskLevel} | Approval: ${step.requiresApproval ? 'required' : 'not required'}`
+        )
+      );
+    });
+  }
+
+  if (verbose) {
+    console.log();
+    console.log(chalk.white(result.summary));
+  }
+}
+
 // CLI Program
 program
   .name('runbook')
@@ -292,12 +407,27 @@ program
   .description('Investigate a PagerDuty/OpsGenie incident')
   .option('-v, --verbose', 'Show detailed output')
   .action(async (incidentId: string, options: { verbose?: boolean }) => {
-    const query = `Investigate incident ${incidentId}. Identify the root cause using hypothesis-driven investigation.`;
-
-    if (process.stdout.isTTY) {
-      render(<AgentUI query={query} incidentId={incidentId} verbose={options.verbose || false} />);
-    } else {
-      await runSimple(query, incidentId);
+    try {
+      await runStructuredInvestigation(incidentId, options.verbose || false);
+    } catch (error) {
+      console.error(
+        chalk.red(
+          `Structured investigation failed: ${error instanceof Error ? error.message : error}`
+        )
+      );
+      console.log(chalk.yellow('Falling back to standard agent investigation...'));
+      const fallbackQuery = `Investigate incident ${incidentId}. Identify the root cause using hypothesis-driven investigation.`;
+      if (process.stdout.isTTY) {
+        render(
+          <AgentUI
+            query={fallbackQuery}
+            incidentId={incidentId}
+            verbose={options.verbose || false}
+          />
+        );
+      } else {
+        await runSimple(fallbackQuery, incidentId);
+      }
     }
   });
 
@@ -306,7 +436,8 @@ program
   .command('status')
   .description('Get a quick status overview of your infrastructure')
   .action(async () => {
-    const query = 'Give me a quick status overview of the infrastructure. What services are running? Any issues?';
+    const query =
+      'Give me a quick status overview of the infrastructure. What services are running? Any issues?';
 
     if (process.stdout.isTTY) {
       render(<AgentUI query={query} verbose={false} />);
@@ -348,9 +479,7 @@ program
   });
 
 // Knowledge commands
-const knowledge = program
-  .command('knowledge')
-  .description('Manage knowledge base');
+const knowledge = program.command('knowledge').description('Manage knowledge base');
 
 knowledge
   .command('sync')
@@ -380,16 +509,27 @@ knowledge
       const retriever = createRetriever();
       const results = await retriever.search(query, {
         limit: 10,
-        typeFilter: options.type ? [options.type as 'runbook' | 'postmortem' | 'architecture' | 'known_issue'] : undefined,
+        typeFilter: options.type
+          ? [options.type as 'runbook' | 'postmortem' | 'architecture' | 'known_issue']
+          : undefined,
         serviceFilter: options.service ? [options.service] : undefined,
       });
-      const total = results.runbooks.length + results.postmortems.length + results.knownIssues.length + results.architecture.length;
+      const total =
+        results.runbooks.length +
+        results.postmortems.length +
+        results.knownIssues.length +
+        results.architecture.length;
 
       if (total === 0) {
         console.log(chalk.yellow('No matching documents found.'));
       } else {
         console.log(chalk.green(`Found ${total} results:\n`));
-        for (const doc of [...results.runbooks, ...results.postmortems, ...results.knownIssues, ...results.architecture]) {
+        for (const doc of [
+          ...results.runbooks,
+          ...results.postmortems,
+          ...results.knownIssues,
+          ...results.architecture,
+        ]) {
           console.log(chalk.cyan(`[${doc.type}] ${doc.title}`));
           console.log(chalk.gray(doc.content.slice(0, 200) + '...\n'));
         }
@@ -461,7 +601,9 @@ knowledge
 
       retriever.close();
     } catch (error) {
-      console.error(chalk.red(`Failed to add file: ${error instanceof Error ? error.message : error}`));
+      console.error(
+        chalk.red(`Failed to add file: ${error instanceof Error ? error.message : error}`)
+      );
     }
   });
 
@@ -482,7 +624,12 @@ knowledge
 
       // Get all documents and check their dates
       const results = await retriever.search('*', { limit: 1000 });
-      const allDocs = [...results.runbooks, ...results.postmortems, ...results.knownIssues, ...results.architecture];
+      const allDocs = [
+        ...results.runbooks,
+        ...results.postmortems,
+        ...results.knownIssues,
+        ...results.architecture,
+      ];
 
       const stale: Array<{ title: string; type: string; age: number }> = [];
       const fresh: Array<{ title: string; type: string }> = [];
@@ -511,11 +658,15 @@ knowledge
         console.log(chalk.green(`\nNo stale documents found.`));
       }
 
-      console.log(chalk.gray(`\nTip: Add 'lastValidated' to frontmatter to track validation dates.`));
+      console.log(
+        chalk.gray(`\nTip: Add 'lastValidated' to frontmatter to track validation dates.`)
+      );
 
       retriever.close();
     } catch (error) {
-      console.error(chalk.red(`Validation failed: ${error instanceof Error ? error.message : error}`));
+      console.error(
+        chalk.red(`Validation failed: ${error instanceof Error ? error.message : error}`)
+      );
     }
   });
 
@@ -539,7 +690,9 @@ knowledge
 
       retriever.close();
     } catch (error) {
-      console.error(chalk.red(`Failed to get stats: ${error instanceof Error ? error.message : error}`));
+      console.error(
+        chalk.red(`Failed to get stats: ${error instanceof Error ? error.message : error}`)
+      );
     }
   });
 
@@ -550,24 +703,29 @@ program
   .option('-e, --environment <env>', 'Target environment', 'production')
   .option('--version <version>', 'Version to deploy')
   .option('--dry-run', 'Show what would be deployed without executing')
-  .action(async (service: string, options: { environment: string; version?: string; dryRun?: boolean }) => {
-    const { environment, version, dryRun } = options;
+  .action(
+    async (
+      service: string,
+      options: { environment: string; version?: string; dryRun?: boolean }
+    ) => {
+      const { environment, version, dryRun } = options;
 
-    const query = dryRun
-      ? `Show me what would happen if I deploy ${service} to ${environment}${version ? ` version ${version}` : ''}. Do not execute, just explain the steps.`
-      : `Deploy ${service} to ${environment}${version ? ` version ${version}` : ''} using the deploy-service skill. Perform all pre-deployment checks first.`;
+      const query = dryRun
+        ? `Show me what would happen if I deploy ${service} to ${environment}${version ? ` version ${version}` : ''}. Do not execute, just explain the steps.`
+        : `Deploy ${service} to ${environment}${version ? ` version ${version}` : ''} using the deploy-service skill. Perform all pre-deployment checks first.`;
 
-    console.log(chalk.cyan(`Deploying ${service} to ${environment}...`));
-    if (version) console.log(chalk.gray(`Version: ${version}`));
-    if (dryRun) console.log(chalk.yellow('(Dry run mode - no changes will be made)'));
-    console.log();
+      console.log(chalk.cyan(`Deploying ${service} to ${environment}...`));
+      if (version) console.log(chalk.gray(`Version: ${version}`));
+      if (dryRun) console.log(chalk.yellow('(Dry run mode - no changes will be made)'));
+      console.log();
 
-    if (process.stdout.isTTY) {
-      render(<AgentUI query={query} verbose={true} />);
-    } else {
-      await runSimple(query);
+      if (process.stdout.isTTY) {
+        render(<AgentUI query={query} verbose={true} />);
+      } else {
+        await runSimple(query);
+      }
     }
-  });
+  );
 
 // Config set command
 program
@@ -630,7 +788,9 @@ program
 
         console.log(chalk.green(`Configuration updated: ${key} = ${JSON.stringify(parsedValue)}`));
       } catch (error) {
-        console.error(chalk.red(`Failed to set config: ${error instanceof Error ? error.message : error}`));
+        console.error(
+          chalk.red(`Failed to set config: ${error instanceof Error ? error.message : error}`)
+        );
       }
     } else if (options.services) {
       const serviceConfig = await loadServiceConfig();
@@ -654,7 +814,8 @@ program
   .option('-p, --port <port>', 'Port to listen on', '3000')
   .option('--pending-dir <dir>', 'Directory for pending approval files')
   .action(async (options: { port: string; pendingDir?: string }) => {
-    const { startWebhookServer, getWebhookConfigFromEnv } = await import('./webhooks/slack-webhook');
+    const { startWebhookServer, getWebhookConfigFromEnv } =
+      await import('./webhooks/slack-webhook');
 
     const envConfig = getWebhookConfigFromEnv();
     const signingSecret = envConfig?.signingSecret || process.env.SLACK_SIGNING_SECRET;
@@ -662,7 +823,9 @@ program
     if (!signingSecret) {
       console.error(chalk.red('Error: SLACK_SIGNING_SECRET environment variable is required'));
       console.log(chalk.yellow('Set it in your environment or .env file'));
-      console.log(chalk.gray('You can find this in your Slack app settings under "Signing Secret"'));
+      console.log(
+        chalk.gray('You can find this in your Slack app settings under "Signing Secret"')
+      );
       process.exit(1);
     }
 
@@ -693,7 +856,11 @@ program
       console.log('');
       console.log(chalk.yellow('Press Ctrl+C to stop'));
     } catch (error) {
-      console.error(chalk.red(`Failed to start webhook server: ${error instanceof Error ? error.message : error}`));
+      console.error(
+        chalk.red(
+          `Failed to start webhook server: ${error instanceof Error ? error.message : error}`
+        )
+      );
       process.exit(1);
     }
   });

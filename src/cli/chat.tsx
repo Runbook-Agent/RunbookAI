@@ -5,7 +5,7 @@
  * Maintains conversation history and context across messages.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Text, Box, useInput, useApp, Static } from 'ink';
 import Spinner from 'ink-spinner';
 import { Agent } from '../agent/agent';
@@ -17,6 +17,7 @@ import { MarkdownText } from './components/markdown';
 import { skillRegistry } from '../skills/registry';
 import { getRuntimeTools } from './runtime-tools';
 import { createRetriever } from '../knowledge/retriever';
+import { createMemory, type ConversationMemory } from '../agent/conversation-memory';
 
 const LOGO = `
   ____              _                 _       _    ___
@@ -61,6 +62,7 @@ export function ChatInterface() {
   });
   const [agent, setAgent] = useState<Agent | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const memoryRef = useRef<ConversationMemory>(createMemory({ summarizeAfterMessages: 16 }));
 
   // Initialize agent on mount
   useEffect(() => {
@@ -104,7 +106,8 @@ export function ChatInterface() {
               ...context.errorMessages,
             ].filter(Boolean) as string[];
 
-            const query = queryParts.join(' ').trim() || 'production incident investigation runbook';
+            const query =
+              queryParts.join(' ').trim() || 'production incident investigation runbook';
             return retriever.search(query, {
               limit: 20,
               serviceFilter: context.services.length > 0 ? context.services : undefined,
@@ -140,10 +143,14 @@ export function ChatInterface() {
         },
         {
           role: 'system',
-          content: 'Ready! Ask me anything about your infrastructure.\nType /help for commands, /exit to quit.',
+          content:
+            'Ready! Ask me anything about your infrastructure.\nType /help for commands, /exit to quit.',
           timestamp: new Date(),
         },
       ]);
+      memoryRef.current.addSystemMessage(
+        'Chat initialized. Use memory context from prior conversation turns when relevant.'
+      );
     } catch (err) {
       setConfigError(err instanceof Error ? err.message : 'Failed to initialize');
     }
@@ -179,6 +186,7 @@ export function ChatInterface() {
       setState({ ...state, error: 'Agent not initialized' });
       return;
     }
+    const memoryContext = memoryRef.current.getContextForPrompt(12000);
 
     // Add user message
     const userMessage: Message = {
@@ -187,6 +195,7 @@ export function ChatInterface() {
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMessage]);
+    memoryRef.current.addUserMessage(trimmedInput);
     setInput('');
 
     // Process with agent
@@ -195,8 +204,11 @@ export function ChatInterface() {
 
     try {
       let answer = '';
+      const promptWithContext = memoryContext
+        ? `${memoryContext}\n\n## Current User Query\n${trimmedInput}`
+        : trimmedInput;
 
-      for await (const event of agent.run(trimmedInput)) {
+      for await (const event of agent.run(promptWithContext)) {
         switch (event.type) {
           case 'thinking':
             setState({ status: 'thinking', currentTool: null, error: null });
@@ -221,6 +233,9 @@ export function ChatInterface() {
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+      memoryRef.current.addAssistantMessage(answer, {
+        toolCalls: toolCalls.map((toolCall) => toolCall.tool),
+      });
       setState({ status: 'idle', currentTool: null, error: null });
     } catch (err) {
       setState({
@@ -243,6 +258,7 @@ export function ChatInterface() {
         break;
 
       case 'clear':
+        memoryRef.current.clear();
         setMessages([
           {
             role: 'system',
@@ -291,12 +307,13 @@ Example queries:
     }
   }
 
-
   // Render config error
   if (configError) {
     return (
       <Box flexDirection="column" padding={1}>
-        <Text color="red" bold>Configuration Error</Text>
+        <Text color="red" bold>
+          Configuration Error
+        </Text>
         <Text color="yellow">{configError}</Text>
       </Box>
     );
@@ -329,7 +346,9 @@ Example queries:
                 <Box flexDirection="column" marginBottom={1}>
                   <Box>
                     <Text color="gray">┌─ </Text>
-                    <Text color="white" bold>Configuration</Text>
+                    <Text color="white" bold>
+                      Configuration
+                    </Text>
                     <Text color="gray"> ─────────────────────────</Text>
                   </Box>
                   <Box>
@@ -340,7 +359,7 @@ Example queries:
                   </Box>
                   <Box>
                     <Text color="gray">│ </Text>
-                    <Text color="gray">AWS Region:  </Text>
+                    <Text color="gray">AWS Region: </Text>
                     <Text color="green">{message.config.awsDefaultRegion}</Text>
                     {message.config.awsRegions.length > 1 && (
                       <Text color="gray"> (+{message.config.awsRegions.length - 1} more)</Text>
@@ -348,7 +367,7 @@ Example queries:
                   </Box>
                   <Box>
                     <Text color="gray">│ </Text>
-                    <Text color="gray">Kubernetes:  </Text>
+                    <Text color="gray">Kubernetes: </Text>
                     <Text color={message.config.kubernetesEnabled ? 'green' : 'yellow'}>
                       {message.config.kubernetesEnabled ? 'enabled' : 'disabled'}
                     </Text>
@@ -361,14 +380,18 @@ Example queries:
             )}
             {message.role === 'user' && (
               <Box>
-                <Text color="green" bold>{'❯ '}</Text>
+                <Text color="green" bold>
+                  {'❯ '}
+                </Text>
                 <Text>{message.content}</Text>
               </Box>
             )}
             {message.role === 'assistant' && (
               <Box flexDirection="column">
                 <Box>
-                  <Text color="cyan" bold>{'◆ Runbook'}</Text>
+                  <Text color="cyan" bold>
+                    {'◆ Runbook'}
+                  </Text>
                 </Box>
                 {message.toolCalls && message.toolCalls.length > 0 && (
                   <Box marginLeft={2}>
@@ -384,7 +407,10 @@ Example queries:
             )}
             {message.role === 'system' && (
               <Box>
-                <Text color="yellow">{'ℹ '}{message.content}</Text>
+                <Text color="yellow">
+                  {'ℹ '}
+                  {message.content}
+                </Text>
               </Box>
             )}
           </Box>
@@ -415,7 +441,9 @@ Example queries:
       {/* Input */}
       {state.status === 'idle' && (
         <Box marginTop={1}>
-          <Text color="green" bold>{'❯ '}</Text>
+          <Text color="green" bold>
+            {'❯ '}
+          </Text>
           <Text>{input}</Text>
           <Text color="cyan">▌</Text>
         </Box>
