@@ -1,4 +1,14 @@
-# Runbook
+```
+ ____              _                 _       _    ___
+|  _ \ _   _ _ __ | |__   ___   ___ | | __  / \  |_ _|
+| |_) | | | | '_ \| '_ \ / _ \ / _ \| |/ / / _ \  | |
+|  _ <| |_| | | | | |_) | (_) | (_) |   < / ___ \ | |
+|_| \_\\__,_|_| |_|_.__/ \___/ \___/|_|\_/_/   \_\___|
+
+        Your AI SRE, always on call
+```
+
+[![CI](https://github.com/manthan787/RunbookAI/actions/workflows/ci.yml/badge.svg)](https://github.com/manthan787/RunbookAI/actions/workflows/ci.yml)
 
 An AI-powered SRE assistant that investigates incidents, executes runbooks, and manages cloud infrastructure using a research-first, hypothesis-driven methodology.
 
