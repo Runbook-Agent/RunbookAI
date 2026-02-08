@@ -18,6 +18,10 @@ import {
 } from './services';
 
 export interface OnboardingAnswers {
+  // LLM Provider
+  llmProvider?: 'anthropic' | 'openai' | 'ollama';
+  llmApiKey?: string;
+
   // Account setup
   accountSetup: 'single' | 'multi' | 'skip';
   accounts?: AWSAccount[];
@@ -90,7 +94,11 @@ export function generateConfig(answers: OnboardingAnswers): ServiceConfig {
 /**
  * Save configuration to file
  */
-export async function saveConfig(config: ServiceConfig, configDir: string = '.runbook'): Promise<string> {
+export async function saveConfig(
+  config: ServiceConfig,
+  configDir: string = '.runbook',
+  llmConfig?: { provider: string; apiKey?: string }
+): Promise<string> {
   // Ensure directory exists
   if (!existsSync(configDir)) {
     await mkdir(configDir, { recursive: true });
@@ -100,6 +108,38 @@ export async function saveConfig(config: ServiceConfig, configDir: string = '.ru
   const yaml = stringifyYaml(config, { indent: 2 });
 
   await writeFile(configPath, yaml, 'utf-8');
+
+  // Also save main config.yaml with LLM settings if provided
+  if (llmConfig) {
+    const mainConfigPath = join(configDir, 'config.yaml');
+    const llmModel = llmConfig.provider === 'anthropic'
+      ? 'claude-sonnet-4-20250514'
+      : llmConfig.provider === 'openai'
+        ? 'gpt-4-turbo-preview'
+        : 'llama3';
+
+    const mainConfig = {
+      llm: {
+        provider: llmConfig.provider,
+        model: llmModel,
+        api_key: llmConfig.apiKey || `\${${llmConfig.provider.toUpperCase()}_API_KEY}`,
+      },
+      agent: {
+        max_iterations: 10,
+        max_hypothesis_depth: 4,
+        context_threshold_tokens: 100000,
+      },
+      safety: {
+        require_approval: ['high', 'critical'],
+        max_mutations_per_session: 5,
+        cooldown_between_critical_ms: 60000,
+      },
+    };
+
+    const mainYaml = stringifyYaml(mainConfig, { indent: 2 });
+    await writeFile(mainConfigPath, mainYaml, 'utf-8');
+  }
+
   return configPath;
 }
 

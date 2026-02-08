@@ -15,7 +15,7 @@ import {
 } from '../config/onboarding';
 import type { AWSAccount } from '../config/services';
 
-type Step = 'welcome' | 'account' | 'regions' | 'compute' | 'database' | 'observability' | 'incident' | 'saving' | 'done';
+type Step = 'welcome' | 'llm_provider' | 'llm_key' | 'account' | 'regions' | 'compute' | 'database' | 'observability' | 'incident' | 'saving' | 'done';
 
 interface SelectOption {
   value: string;
@@ -128,6 +128,8 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Answers
+  const [llmProvider, setLlmProvider] = useState<'anthropic' | 'openai' | 'ollama'>('anthropic');
+  const [llmApiKey, setLlmApiKey] = useState('');
   const [accountSetup, setAccountSetup] = useState<'single' | 'multi' | 'skip'>('single');
   const [regions, setRegions] = useState('us-east-1');
   const [computeServices, setComputeServices] = useState<string[]>([]);
@@ -138,7 +140,7 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
   // Navigation
   useInput((input, key) => {
     if (step === 'welcome' && key.return) {
-      setStep('account');
+      setStep('llm_provider');
       setFocusedIndex(0);
       return;
     }
@@ -157,6 +159,8 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
 
   function getMaxIndex(): number {
     switch (step) {
+      case 'llm_provider':
+        return 2; // anthropic, openai, ollama
       case 'account':
         return ONBOARDING_PROMPTS.accountSetup.options.length - 1;
       case 'compute':
@@ -187,10 +191,15 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
         databaseServices: databaseServices.length > 0 ? databaseServices as OnboardingAnswers['databaseServices'] : ['none'],
         useCloudWatch,
         incidentProvider,
+        llmProvider,
+        llmApiKey: llmProvider !== 'ollama' ? llmApiKey : undefined,
       };
 
       const config = generateConfig(answers);
-      await saveConfig(config, configDir);
+      await saveConfig(config, configDir, {
+        provider: llmProvider,
+        apiKey: llmApiKey || undefined,
+      });
       setStep('done');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -218,10 +227,69 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
         </Box>
       );
 
+    case 'llm_provider':
+      return (
+        <Box flexDirection="column">
+          <Text bold color="yellow">Step 1: Choose your AI provider</Text>
+          <Box marginTop={1}>
+            <SingleSelect
+              options={[
+                { value: 'anthropic', label: 'Anthropic (Claude)', description: 'Recommended - best for complex reasoning' },
+                { value: 'openai', label: 'OpenAI (GPT-4)', description: 'Popular alternative with broad capabilities' },
+                { value: 'ollama', label: 'Ollama (Local)', description: 'Run models locally - no API key required' },
+              ]}
+              focusedIndex={focusedIndex}
+              onSelect={(value) => {
+                setLlmProvider(value as 'anthropic' | 'openai' | 'ollama');
+                if (value === 'ollama') {
+                  // Skip API key for Ollama
+                  setStep('account');
+                } else {
+                  setStep('llm_key');
+                }
+                setFocusedIndex(0);
+              }}
+            />
+          </Box>
+        </Box>
+      );
+
+    case 'llm_key':
+      return (
+        <Box flexDirection="column">
+          <Text bold color="yellow">Step 2: Enter your API key</Text>
+          <Box marginTop={1} flexDirection="column">
+            <Text color="gray">
+              {llmProvider === 'anthropic'
+                ? 'Get your API key from: https://console.anthropic.com/settings/keys'
+                : 'Get your API key from: https://platform.openai.com/api-keys'}
+            </Text>
+            <Box marginTop={1}>
+              <TextInput
+                prompt={`Enter your ${llmProvider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key:`}
+                value={llmApiKey}
+                onChange={setLlmApiKey}
+                onSubmit={() => {
+                  if (llmApiKey.trim()) {
+                    setStep('account');
+                    setFocusedIndex(0);
+                  }
+                }}
+              />
+            </Box>
+            {!llmApiKey.trim() && (
+              <Box marginTop={1}>
+                <Text color="red">API key is required to continue</Text>
+              </Box>
+            )}
+          </Box>
+        </Box>
+      );
+
     case 'account':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 1: {ONBOARDING_PROMPTS.accountSetup.question}</Text>
+          <Text bold color="yellow">Step 3: {ONBOARDING_PROMPTS.accountSetup.question}</Text>
           <Box marginTop={1}>
             <SingleSelect
               options={ONBOARDING_PROMPTS.accountSetup.options}
@@ -239,7 +307,7 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'regions':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 2: AWS Regions</Text>
+          <Text bold color="yellow">Step 4: AWS Regions</Text>
           <Box marginTop={1}>
             <TextInput
               prompt="Enter AWS regions (comma-separated, e.g., us-east-1,us-west-2):"
@@ -257,7 +325,7 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'compute':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 3: {ONBOARDING_PROMPTS.computeServices.question}</Text>
+          <Text bold color="yellow">Step 5: {ONBOARDING_PROMPTS.computeServices.question}</Text>
           <Box marginTop={1}>
             <MultiSelect
               options={ONBOARDING_PROMPTS.computeServices.options}
@@ -280,7 +348,7 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'database':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 4: {ONBOARDING_PROMPTS.databaseServices.question}</Text>
+          <Text bold color="yellow">Step 6: {ONBOARDING_PROMPTS.databaseServices.question}</Text>
           <Box marginTop={1}>
             <MultiSelect
               options={ONBOARDING_PROMPTS.databaseServices.options}
@@ -303,7 +371,7 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'observability':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 5: {ONBOARDING_PROMPTS.observability.question}</Text>
+          <Text bold color="yellow">Step 7: {ONBOARDING_PROMPTS.observability.question}</Text>
           <Box marginTop={1}>
             <SingleSelect
               options={ONBOARDING_PROMPTS.observability.options.map((o) => ({
@@ -325,7 +393,7 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'incident':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 6: {ONBOARDING_PROMPTS.incidentProvider.question}</Text>
+          <Text bold color="yellow">Step 8: {ONBOARDING_PROMPTS.incidentProvider.question}</Text>
           <Box marginTop={1}>
             <SingleSelect
               options={ONBOARDING_PROMPTS.incidentProvider.options}
@@ -369,6 +437,7 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
 
               <Box marginTop={1} flexDirection="column">
                 <Text bold>Your configuration:</Text>
+                <Text>• AI Provider: {llmProvider}{llmApiKey ? ' (key configured)' : ''}</Text>
                 <Text>• Regions: {regions}</Text>
                 <Text>• Compute: {computeServices.length > 0 ? computeServices.join(', ') : 'none'}</Text>
                 <Text>• Databases: {databaseServices.length > 0 ? databaseServices.join(', ') : 'none'}</Text>

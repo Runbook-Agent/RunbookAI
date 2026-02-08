@@ -616,5 +616,56 @@ program
     }
   });
 
+// Webhook server command
+program
+  .command('webhook')
+  .description('Start the Slack webhook server for handling approval button clicks')
+  .option('-p, --port <port>', 'Port to listen on', '3000')
+  .option('--pending-dir <dir>', 'Directory for pending approval files')
+  .action(async (options: { port: string; pendingDir?: string }) => {
+    const { startWebhookServer, getWebhookConfigFromEnv } = await import('./webhooks/slack-webhook');
+
+    const envConfig = getWebhookConfigFromEnv();
+    const signingSecret = envConfig?.signingSecret || process.env.SLACK_SIGNING_SECRET;
+
+    if (!signingSecret) {
+      console.error(chalk.red('Error: SLACK_SIGNING_SECRET environment variable is required'));
+      console.log(chalk.yellow('Set it in your environment or .env file'));
+      console.log(chalk.gray('You can find this in your Slack app settings under "Signing Secret"'));
+      process.exit(1);
+    }
+
+    const port = parseInt(options.port, 10);
+    if (isNaN(port) || port < 1 || port > 65535) {
+      console.error(chalk.red('Error: Invalid port number'));
+      process.exit(1);
+    }
+
+    console.log(chalk.cyan('Starting Slack webhook server...'));
+    console.log(chalk.gray(`Port: ${port}`));
+    console.log(chalk.gray(`Pending dir: ${options.pendingDir || '.runbook/pending'}`));
+
+    try {
+      await startWebhookServer({
+        port,
+        signingSecret,
+        pendingDir: options.pendingDir,
+      });
+
+      console.log('');
+      console.log(chalk.green('Webhook server is running!'));
+      console.log('');
+      console.log(chalk.cyan('Configure your Slack app:'));
+      console.log(chalk.gray('1. Go to your Slack app settings'));
+      console.log(chalk.gray('2. Navigate to "Interactivity & Shortcuts"'));
+      console.log(chalk.gray(`3. Set Request URL to: https://your-domain.com/slack/interactions`));
+      console.log('');
+      console.log(chalk.yellow('Press Ctrl+C to stop'));
+    } catch (error) {
+      console.error(chalk.red(`Failed to start webhook server: ${error instanceof Error ? error.message : error}`));
+      process.exit(1);
+    }
+  });
+
 // Parse and run
 program.parse();

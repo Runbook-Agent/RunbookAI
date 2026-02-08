@@ -623,7 +623,9 @@ Total: 156 tests passing across 5 test files
    - Reference previous findings
    - Serialize/deserialize for persistence
 
-### Priority 2: Infrastructure
+### Priority 2: Infrastructure - 100% Complete ✅
+Total: 241 tests passing across 8 test files
+
 1. ✅ Add service dependency graph
    - `src/knowledge/store/graph-store.ts` with full graph operations
    - `src/knowledge/store/__tests__/graph-store.test.ts` with 31 passing tests
@@ -631,8 +633,34 @@ Total: 156 tests passing across 5 test files
    - Dependency edges with criticality and type
    - Impact analysis (upstream and downstream)
    - Path finding, cycle detection, and statistics
-2. 🔲 Implement Slack webhook server for approval buttons
-3. 🔲 Add Kubernetes integration
+
+2. ✅ Implement Slack webhook server for approval buttons
+   - `src/webhooks/slack-webhook.ts` with HTTP server for Slack interactivity
+   - `src/webhooks/__tests__/slack-webhook.test.ts` with 20 passing tests
+   - Slack signature verification for security
+   - Handle approve/reject button clicks
+   - Write response files for polling approval flow
+   - Update Slack message with approval status
+   - CLI command: `runbook webhook` to start server
+   - Health check endpoint at /health
+   - Pending approval listing and cleanup utilities
+
+3. ✅ Add Kubernetes integration
+   - `src/providers/kubernetes/client.ts` with kubectl wrapper
+   - `src/providers/kubernetes/__tests__/client.test.ts` with 34 passing tests
+   - Full K8s resource support: pods, deployments, services, nodes, events, etc.
+   - Pod status with container details, restarts, and node assignment
+   - Deployment status with replica counts and image info
+   - Node status with roles, conditions, capacity, and allocatable resources
+   - Log retrieval with tail, since, previous, and container options
+   - Deployment operations: scale, restart, rollback, rollout status
+   - Resource usage with top pods/nodes
+   - Cluster info and multi-context support
+
+4. ✅ Add AI provider configuration to init wizard
+   - Setup wizard now asks for LLM provider (Anthropic, OpenAI, Ollama)
+   - API key input with provider-specific instructions
+   - Saves to .runbook/config.yaml with model defaults
 
 **Usage:**
 ```bash
