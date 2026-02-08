@@ -6,8 +6,13 @@
  */
 
 import type { Tool } from '../agent/types';
-import { getActiveAlarms, filterLogEvents, listLogGroups } from './aws/cloudwatch';
-import { getIncident, getIncidentAlerts, listIncidents, addIncidentNote } from './incident/pagerduty';
+import { getActiveAlarms, filterLogEvents } from './aws/cloudwatch';
+import {
+  getIncident,
+  getIncidentAlerts,
+  listIncidents,
+  addIncidentNote,
+} from './incident/pagerduty';
 import {
   isSlackConfigured,
   postMessage,
@@ -45,8 +50,13 @@ import {
   COMMON_QUERIES,
 } from './observability/prometheus';
 import { createRetriever } from '../knowledge/retriever';
-import { AWS_SERVICES, getServiceById, getAllServiceIds, CATEGORY_DESCRIPTIONS } from '../providers/aws/services';
-import { executeListOperation, executeMultiServiceQuery, getInstalledServices } from '../providers/aws/executor';
+import {
+  AWS_SERVICES,
+  getServiceById,
+  getAllServiceIds,
+  CATEGORY_DESCRIPTIONS,
+} from '../providers/aws/services';
+import { executeMultiServiceQuery, getInstalledServices } from '../providers/aws/executor';
 import {
   classifyRisk,
   requestApproval,
@@ -105,11 +115,7 @@ class ToolRegistry {
   /**
    * Register multiple tools in a category
    */
-  registerCategory(
-    name: string,
-    description: string,
-    tools: Tool[]
-  ): void {
+  registerCategory(name: string, description: string, tools: Tool[]): void {
     this.categories.set(name, { name, description, tools });
     for (const tool of tools) {
       this.allTools.set(tool.name, tool);
@@ -221,7 +227,18 @@ ${categoryList}
       category: {
         type: 'string',
         description: 'Query all services in a category',
-        enum: ['compute', 'database', 'storage', 'networking', 'security', 'analytics', 'integration', 'devtools', 'ml', 'management'],
+        enum: [
+          'compute',
+          'database',
+          'storage',
+          'networking',
+          'security',
+          'analytics',
+          'integration',
+          'devtools',
+          'ml',
+          'management',
+        ],
       },
       region: {
         type: 'string',
@@ -470,7 +487,8 @@ async function executeAwsMutation(
     }
 
     case 'ec2': {
-      const { EC2Client, RebootInstancesCommand, StopInstancesCommand, StartInstancesCommand } = await import('@aws-sdk/client-ec2');
+      const { EC2Client, RebootInstancesCommand, StopInstancesCommand, StartInstancesCommand } =
+        await import('@aws-sdk/client-ec2');
       const client = new EC2Client({ region: (parameters.region as string) || 'us-east-1' });
 
       if (action === 'RebootInstances') {
@@ -508,7 +526,8 @@ async function executeAwsMutation(
     }
 
     case 'lambda': {
-      const { LambdaClient, UpdateFunctionConfigurationCommand } = await import('@aws-sdk/client-lambda');
+      const { LambdaClient, UpdateFunctionConfigurationCommand } =
+        await import('@aws-sdk/client-lambda');
       const client = new LambdaClient({ region: (parameters.region as string) || 'us-east-1' });
 
       if (action === 'UpdateFunctionConfiguration') {
@@ -530,7 +549,9 @@ async function executeAwsMutation(
     }
 
     default:
-      throw new Error(`Unsupported operation: ${operation}. Supported: ecs:UpdateService, ec2:RebootInstances, ec2:StopInstances, ec2:StartInstances, lambda:UpdateFunctionConfiguration`);
+      throw new Error(
+        `Unsupported operation: ${operation}. Supported: ecs:UpdateService, ec2:RebootInstances, ec2:StopInstances, ec2:StartInstances, lambda:UpdateFunctionConfiguration`
+      );
   }
 
   throw new Error(`Unknown action ${action} for service ${service}`);
@@ -586,7 +607,9 @@ export const searchKnowledgeTool = defineTool(
     try {
       const r = getRetriever();
       const results = await r.search(args.query as string, {
-        typeFilter: args.type_filter as Array<'runbook' | 'postmortem' | 'architecture' | 'known_issue'> | undefined,
+        typeFilter: args.type_filter as
+          | Array<'runbook' | 'postmortem' | 'architecture' | 'known_issue'>
+          | undefined,
         serviceFilter: args.service_filter as string[] | undefined,
         limit: 5,
       });
@@ -649,9 +672,10 @@ export const cloudwatchAlarmsTool = defineTool(
       return {
         alarms,
         count: alarms.length,
-        visualizationHint: alarms.length > 0
-          ? 'ALARM DATA: You MUST call visualize_metrics to display this data. Use chart_type="sparkline" with the recentDatapoints values, or chart_type="gauge" for current state. Do this BEFORE providing text.'
-          : undefined,
+        visualizationHint:
+          alarms.length > 0
+            ? 'ALARM DATA: You MUST call visualize_metrics to display this data. Use chart_type="sparkline" with the recentDatapoints values, or chart_type="gauge" for current state. Do this BEFORE providing text.'
+            : undefined,
       };
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Unknown error' };
@@ -1119,14 +1143,15 @@ function preprocessDateExpressions(command: string): string {
 
   // Pattern: $(date -d '30 days ago' +%Y-%m-%d) or $(date -d "30 days ago" +%Y-%m-%d)
   // GNU date syntax
-  const gnuDatePattern = /\$\(date\s+-d\s+['"]?(\d+)\s+(day|days|week|weeks|month|months)\s+ago['"]?\s+\+%Y-%m-%d\)/gi;
+  const gnuDatePattern =
+    /\$\(date\s+-d\s+['"]?(\d+)\s+(day|days|week|weeks|month|months)\s+ago['"]?\s+\+%Y-%m-%d\)/gi;
   processedCommand = processedCommand.replace(gnuDatePattern, (_, amount, unit) => {
     const date = new Date();
     const num = parseInt(amount, 10);
     if (unit.startsWith('day')) {
       date.setDate(date.getDate() - num);
     } else if (unit.startsWith('week')) {
-      date.setDate(date.getDate() - (num * 7));
+      date.setDate(date.getDate() - num * 7);
     } else if (unit.startsWith('month')) {
       date.setMonth(date.getMonth() - num);
     }
@@ -1139,10 +1164,18 @@ function preprocessDateExpressions(command: string): string {
     const date = new Date();
     const num = parseInt(amount, 10);
     switch (unit.toLowerCase()) {
-      case 'd': date.setDate(date.getDate() - num); break;
-      case 'w': date.setDate(date.getDate() - (num * 7)); break;
-      case 'm': date.setMonth(date.getMonth() - num); break;
-      case 'y': date.setFullYear(date.getFullYear() - num); break;
+      case 'd':
+        date.setDate(date.getDate() - num);
+        break;
+      case 'w':
+        date.setDate(date.getDate() - num * 7);
+        break;
+      case 'm':
+        date.setMonth(date.getMonth() - num);
+        break;
+      case 'y':
+        date.setFullYear(date.getFullYear() - num);
+        break;
     }
     return formatDate(date);
   });
@@ -1170,7 +1203,8 @@ function preprocessDateExpressions(command: string): string {
   });
 
   // Pattern: $(date -d 'first day of last month' +%Y-%m-%d)
-  const firstDayLastMonthPattern = /\$\(date\s+-d\s+['"]?first\s+day\s+of\s+last\s+month['"]?\s+\+%Y-%m-%d\)/gi;
+  const firstDayLastMonthPattern =
+    /\$\(date\s+-d\s+['"]?first\s+day\s+of\s+last\s+month['"]?\s+\+%Y-%m-%d\)/gi;
   processedCommand = processedCommand.replace(firstDayLastMonthPattern, () => {
     const date = new Date();
     date.setMonth(date.getMonth() - 1);
@@ -1228,7 +1262,18 @@ export const awsCliTool = defineTool(
     const command = preprocessDateExpressions(rawCommand);
 
     // Block mutation commands
-    const mutationKeywords = ['create', 'update', 'delete', 'put', 'terminate', 'stop', 'start', 'modify', 'remove', 'set'];
+    const mutationKeywords = [
+      'create',
+      'update',
+      'delete',
+      'put',
+      'terminate',
+      'stop',
+      'start',
+      'modify',
+      'remove',
+      'set',
+    ];
     const commandLower = command.toLowerCase();
     for (const keyword of mutationKeywords) {
       if (commandLower.includes(` ${keyword}-`) || commandLower.includes(` ${keyword} `)) {
@@ -1262,16 +1307,25 @@ export const awsCliTool = defineTool(
       let autoVisualization: string | undefined;
       const resultStr = JSON.stringify(result);
 
-      if (command.includes('ce get-cost') || resultStr.includes('BlendedCost') || resultStr.includes('UnblendedCost')) {
+      if (
+        command.includes('ce get-cost') ||
+        resultStr.includes('BlendedCost') ||
+        resultStr.includes('UnblendedCost')
+      ) {
         // Extract cost values and generate chart automatically
         try {
-          const costResult = result as { ResultsByTime?: Array<{ TimePeriod: { Start: string }; Total: { BlendedCost?: { Amount: string }; UnblendedCost?: { Amount: string } } }> };
+          const costResult = result as {
+            ResultsByTime?: Array<{
+              TimePeriod: { Start: string };
+              Total: { BlendedCost?: { Amount: string }; UnblendedCost?: { Amount: string } };
+            }>;
+          };
           if (costResult.ResultsByTime && costResult.ResultsByTime.length > 0) {
-            const values = costResult.ResultsByTime.map(r => {
+            const values = costResult.ResultsByTime.map((r) => {
               const amount = r.Total.BlendedCost?.Amount || r.Total.UnblendedCost?.Amount || '0';
               return parseFloat(amount);
             });
-            const labels = costResult.ResultsByTime.map(r => {
+            const labels = costResult.ResultsByTime.map((r) => {
               const date = new Date(r.TimePeriod.Start);
               return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
             });
@@ -1487,9 +1541,7 @@ toolRegistry.registerCategory('aws', 'AWS Cloud Operations', [
   cloudwatchLogsTool,
 ]);
 
-toolRegistry.registerCategory('kubernetes', 'Kubernetes Cluster Operations', [
-  kubernetesQueryTool,
-]);
+toolRegistry.registerCategory('kubernetes', 'Kubernetes Cluster Operations', [kubernetesQueryTool]);
 
 /**
  * Prometheus Query Tool
@@ -1589,7 +1641,10 @@ export const prometheusTool = defineTool(
             results: result.result.map((r) => ({
               labels: r.metric,
               points: r.values?.length || 0,
-              lastValue: r.values && r.values.length > 0 ? parseFloat(r.values[r.values.length - 1][1]) : null,
+              lastValue:
+                r.values && r.values.length > 0
+                  ? parseFloat(r.values[r.values.length - 1][1])
+                  : null,
             })),
             count: result.result.length,
           };
@@ -1697,9 +1752,7 @@ toolRegistry.registerCategory('observability', 'Observability & Monitoring', [
   prometheusTool,
 ]);
 
-toolRegistry.registerCategory('knowledge', 'Knowledge Base', [
-  searchKnowledgeTool,
-]);
+toolRegistry.registerCategory('knowledge', 'Knowledge Base', [searchKnowledgeTool]);
 
 /**
  * PagerDuty Add Note Tool
@@ -2538,8 +2591,6 @@ toolRegistry.registerCategory('context', 'Context Management', [
 
 import {
   mermaidToASCII,
-  parseFlowchart,
-  parseSequenceDiagram,
   renderFlowchartASCII,
   renderSequenceDiagramASCII,
 } from './diagram/mermaid';
@@ -2549,7 +2600,6 @@ import {
   generateSparkline,
   generateGauge,
   generateHistogram,
-  type TimeSeriesPoint,
   type BarChartData,
 } from './diagram/charts';
 
@@ -2625,7 +2675,10 @@ export const generateFlowchartTool = defineTool(
     const direction = (args.direction as 'TD' | 'LR' | 'BT' | 'RL') || 'TD';
 
     // Build flowchart data
-    const nodeMap = new Map<string, { id: string; label: string; shape: 'rect' | 'diamond' | 'circle' | 'stadium' }>();
+    const nodeMap = new Map<
+      string,
+      { id: string; label: string; shape: 'rect' | 'diamond' | 'circle' | 'stadium' }
+    >();
     for (const node of nodes) {
       nodeMap.set(node.id, {
         id: node.id,
@@ -2804,7 +2857,10 @@ export const generateArchitectureDiagramTool = defineTool(
       load_balancer: 'diamond',
     };
 
-    const nodeMap = new Map<string, { id: string; label: string; shape: 'rect' | 'diamond' | 'circle' | 'stadium' }>();
+    const nodeMap = new Map<
+      string,
+      { id: string; label: string; shape: 'rect' | 'diamond' | 'circle' | 'stadium' }
+    >();
     for (const comp of components) {
       nodeMap.set(comp.id, {
         id: comp.id,
@@ -2889,7 +2945,8 @@ export const visualizeMetricsTool = defineTool(
       },
       values: {
         type: 'array',
-        description: 'Simple array of numbers for sparklines. Use this OR data, not both. Example: [0, 5, 10, 8, 12]',
+        description:
+          'Simple array of numbers for sparklines. Use this OR data, not both. Example: [0, 5, 10, 8, 12]',
         items: { type: 'number' },
       },
       title: {
@@ -2941,7 +2998,7 @@ export const visualizeMetricsTool = defineTool(
         // Prefer simple 'values' array if provided, otherwise extract from 'data'
         let values: number[];
         if (simpleValues && Array.isArray(simpleValues)) {
-          values = simpleValues.map(v => typeof v === 'number' ? v : parseFloat(String(v)));
+          values = simpleValues.map((v) => (typeof v === 'number' ? v : parseFloat(String(v))));
         } else if (data && Array.isArray(data)) {
           values = data.map((d) => {
             if (typeof d === 'number') return d;

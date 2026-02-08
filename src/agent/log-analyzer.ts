@@ -256,8 +256,8 @@ export function parseLogLine(line: string): LogEntry {
 
   // Extract source/service from common formats
   // e.g., [api-gateway] or <api-gateway> or api-gateway:
-  const sourceMatch = line.match(/[\[<]([a-zA-Z0-9-_]+)[\]>]|^([a-zA-Z0-9-_]+):/);
-  const source = sourceMatch ? (sourceMatch[1] || sourceMatch[2]) : undefined;
+  const sourceMatch = line.match(/[[<]([a-zA-Z0-9-_]+)[\]>]|^([a-zA-Z0-9-_]+):/);
+  const source = sourceMatch ? sourceMatch[1] || sourceMatch[2] : undefined;
 
   return {
     timestamp,
@@ -324,7 +324,10 @@ export function analyzePatterns(logs: string[]): PatternMatch[] {
 /**
  * Extract mentioned services from logs
  */
-export function extractServiceMentions(logs: string[], knownServices: string[] = []): Map<string, number> {
+export function extractServiceMentions(
+  logs: string[],
+  knownServices: string[] = []
+): Map<string, number> {
   const mentions = new Map<string, number>();
 
   // Common service name patterns
@@ -436,7 +439,9 @@ export function generateSummary(result: Omit<LogAnalysisResult, 'summary'>): str
   }
 
   if (result.timeRange) {
-    lines.push(`Time range: ${result.timeRange.start.toISOString()} to ${result.timeRange.end.toISOString()}`);
+    lines.push(
+      `Time range: ${result.timeRange.start.toISOString()} to ${result.timeRange.end.toISOString()}`
+    );
   }
 
   if (result.patternMatches.length > 0) {
@@ -500,7 +505,10 @@ export function formatLogsForLLM(logs: string[], maxLines: number = 100): string
     sampled = [
       ...logs.slice(0, third),
       `... (${logs.length - maxLines} lines omitted) ...`,
-      ...logs.slice(Math.floor(logs.length / 2) - Math.floor(third / 2), Math.floor(logs.length / 2) + Math.floor(third / 2)),
+      ...logs.slice(
+        Math.floor(logs.length / 2) - Math.floor(third / 2),
+        Math.floor(logs.length / 2) + Math.floor(third / 2)
+      ),
       ...logs.slice(-third),
     ];
   }
@@ -511,7 +519,11 @@ export function formatLogsForLLM(logs: string[], maxLines: number = 100): string
 /**
  * Create prompt for LLM log analysis
  */
-export function createLogAnalysisPrompt(logs: string[], startTime?: string, endTime?: string): string {
+export function createLogAnalysisPrompt(
+  logs: string[],
+  startTime?: string,
+  endTime?: string
+): string {
   const formattedLogs = formatLogsForLLM(logs);
   const start = startTime || 'unknown';
   const end = endTime || 'unknown';
@@ -526,7 +538,10 @@ export function createLogAnalysisPrompt(logs: string[], startTime?: string, endT
 /**
  * Merge pattern analysis with LLM analysis
  */
-export function mergeAnalysis(patternResult: LogAnalysisResult, llmResult: LogAnalysis): LogAnalysisResult {
+export function mergeAnalysis(
+  patternResult: LogAnalysisResult,
+  llmResult: LogAnalysis
+): LogAnalysisResult {
   // Combine hypotheses, deduplicating
   const allHypotheses = new Set([
     ...patternResult.suggestedHypotheses,
@@ -577,8 +592,20 @@ export function filterLogsByTime(logs: string[], start: Date, end: Date): string
 /**
  * Filter logs by level
  */
-export function filterLogsByLevel(logs: string[], minLevel: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'CRITICAL'): string[] {
-  const levelOrder = { DEBUG: 0, TRACE: 0, INFO: 1, WARN: 2, WARNING: 2, ERROR: 3, CRITICAL: 4, FATAL: 4 };
+export function filterLogsByLevel(
+  logs: string[],
+  minLevel: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'CRITICAL'
+): string[] {
+  const levelOrder = {
+    DEBUG: 0,
+    TRACE: 0,
+    INFO: 1,
+    WARN: 2,
+    WARNING: 2,
+    ERROR: 3,
+    CRITICAL: 4,
+    FATAL: 4,
+  };
   const minOrder = levelOrder[minLevel];
 
   return logs.filter((log) => {

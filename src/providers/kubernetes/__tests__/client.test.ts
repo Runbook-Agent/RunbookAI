@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { EventEmitter } from 'events';
 import {
   KubernetesClient,
   createKubernetesClient,
@@ -14,8 +15,6 @@ import {
 
 // Mock child_process.spawn
 vi.mock('child_process', () => {
-  const EventEmitter = require('events');
-
   return {
     spawn: vi.fn(() => {
       const proc = new EventEmitter();
@@ -416,7 +415,9 @@ describe('KubernetesClient', () => {
   describe('cluster info', () => {
     it('should parse server URL', () => {
       const infoOutput = 'Kubernetes control plane is running at https://192.168.1.1:6443';
-      const match = infoOutput.match(/Kubernetes (?:control plane|master) is running at (https?:\/\/[^\s]+)/);
+      const match = infoOutput.match(
+        /Kubernetes (?:control plane|master) is running at (https?:\/\/[^\s]+)/
+      );
 
       expect(match).not.toBeNull();
       expect(match?.[1]).toBe('https://192.168.1.1:6443');
@@ -424,7 +425,9 @@ describe('KubernetesClient', () => {
 
     it('should handle old master terminology', () => {
       const infoOutput = 'Kubernetes master is running at https://192.168.1.1:6443';
-      const match = infoOutput.match(/Kubernetes (?:control plane|master) is running at (https?:\/\/[^\s]+)/);
+      const match = infoOutput.match(
+        /Kubernetes (?:control plane|master) is running at (https?:\/\/[^\s]+)/
+      );
 
       expect(match).not.toBeNull();
     });

@@ -48,9 +48,7 @@ export interface StateDiagramData {
 /**
  * Detect diagram type from mermaid code
  */
-export function detectDiagramType(
-  code: string
-): 'flowchart' | 'sequence' | 'state' | 'unknown' {
+export function detectDiagramType(code: string): 'flowchart' | 'sequence' | 'state' | 'unknown' {
   const firstLine = code.trim().split('\n')[0].toLowerCase();
 
   if (firstLine.startsWith('graph') || firstLine.startsWith('flowchart')) {
@@ -116,7 +114,9 @@ export function parseFlowchart(code: string): FlowchartData {
     }
 
     // Parse node definition: A[Label] or A{Decision} or A((Circle)) or A([Stadium])
-    const nodeMatch = line.match(/^(\w+)(\[([^\]]+)\]|\{([^}]+)\}|\(\(([^)]+)\)\)|\(\[([^\]]+)\]\))?$/);
+    const nodeMatch = line.match(
+      /^(\w+)(\[([^\]]+)\]|\{([^}]+)\}|\(\(([^)]+)\)\)|\(\[([^\]]+)\]\))?$/
+    );
     if (nodeMatch) {
       const [, id, , rectLabel, diamondLabel, circleLabel, stadiumLabel] = nodeMatch;
       let shape: MermaidNode['shape'] = 'rect';
@@ -168,9 +168,7 @@ export function parseSequenceDiagram(code: string): SequenceDiagramData {
     }
 
     // Parse message: A->>B: message or A-->>B: message
-    const messageMatch = line.match(
-      /^(\w+)\s*(-{1,2}>>?|\.{2,}>>?)\s*(\w+)\s*:\s*(.+)$/
-    );
+    const messageMatch = line.match(/^(\w+)\s*(-{1,2}>>?|\.{2,}>>?)\s*(\w+)\s*:\s*(.+)$/);
     if (messageMatch) {
       const [, from, connector, to, message] = messageMatch;
 
@@ -409,7 +407,10 @@ export function renderSequenceDiagramASCII(data: SequenceDiagramData): string {
   for (const participant of data.participants) {
     const pos = participantPositions.get(participant)!;
     const padding = ' '.repeat(pos - headerLine.length);
-    const label = participant.slice(0, colWidth - 2).padStart((colWidth - 2 + participant.length) / 2).padEnd(colWidth - 2);
+    const label = participant
+      .slice(0, colWidth - 2)
+      .padStart((colWidth - 2 + participant.length) / 2)
+      .padEnd(colWidth - 2);
 
     boxTopLine += padding + '┌' + '─'.repeat(colWidth - 2) + '┐';
     headerLine += padding + '│' + label + '│';
@@ -445,20 +446,16 @@ export function renderSequenceDiagramASCII(data: SequenceDiagramData): string {
 
     let arrowLine = ' '.repeat(left);
     if (message.type === 'dotted') {
-      arrowLine += goingRight
-        ? '·'.repeat(arrowLen - 1) + '>'
-        : '<' + '·'.repeat(arrowLen - 1);
+      arrowLine += goingRight ? '·'.repeat(arrowLen - 1) + '>' : '<' + '·'.repeat(arrowLen - 1);
     } else {
-      arrowLine += goingRight
-        ? '─'.repeat(arrowLen - 1) + '>'
-        : '<' + '─'.repeat(arrowLen - 1);
+      arrowLine += goingRight ? '─'.repeat(arrowLen - 1) + '>' : '<' + '─'.repeat(arrowLen - 1);
     }
 
     lines.push(arrowLine.padEnd(totalWidth));
 
     // Draw message label
     const labelPos = left + Math.floor(arrowLen / 2) - Math.floor(message.message.length / 2);
-    let labelLine = ' '.repeat(Math.max(0, labelPos)) + message.message;
+    const labelLine = ' '.repeat(Math.max(0, labelPos)) + message.message;
     lines.push(labelLine.padEnd(totalWidth));
   }
 

@@ -2,7 +2,7 @@
  * Tests for Slack Webhook Server
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHmac } from 'crypto';
 import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -104,8 +104,8 @@ describe('SlackWebhook', () => {
       const pending = listPendingApprovals(TEST_PENDING_DIR);
 
       expect(pending).toHaveLength(2);
-      expect(pending.map(p => p.mutationId)).toContain('mut_123');
-      expect(pending.map(p => p.mutationId)).toContain('mut_456');
+      expect(pending.map((p) => p.mutationId)).toContain('mut_123');
+      expect(pending.map((p) => p.mutationId)).toContain('mut_456');
     });
 
     it('should ignore response files', () => {
@@ -130,10 +130,7 @@ describe('SlackWebhook', () => {
         join(TEST_PENDING_DIR, 'mut_123_pending.json'),
         JSON.stringify({ mutationId: 'mut_123', createdAt: '2024-01-01T00:00:00Z' })
       );
-      writeFileSync(
-        join(TEST_PENDING_DIR, 'mut_bad_pending.json'),
-        'not valid json'
-      );
+      writeFileSync(join(TEST_PENDING_DIR, 'mut_bad_pending.json'), 'not valid json');
 
       const pending = listPendingApprovals(TEST_PENDING_DIR);
 
@@ -169,13 +166,10 @@ describe('SlackWebhook', () => {
         join(TEST_PENDING_DIR, 'mut_123_pending.json'),
         JSON.stringify({ mutationId: 'mut_123' })
       );
-      writeFileSync(
-        join(TEST_PENDING_DIR, 'mut_456.json'),
-        JSON.stringify({ approved: true })
-      );
+      writeFileSync(join(TEST_PENDING_DIR, 'mut_456.json'), JSON.stringify({ approved: true }));
 
       // Small delay to ensure file mtime is in the past
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       const cleaned = cleanupExpiredApprovals(0, TEST_PENDING_DIR);
 
@@ -236,7 +230,9 @@ describe('SlackWebhook', () => {
 
       writeFileSync(join(TEST_PENDING_DIR, `${mutationId}.json`), JSON.stringify(response));
 
-      const content = JSON.parse(readFileSync(join(TEST_PENDING_DIR, `${mutationId}.json`), 'utf-8'));
+      const content = JSON.parse(
+        readFileSync(join(TEST_PENDING_DIR, `${mutationId}.json`), 'utf-8')
+      );
 
       expect(content.approved).toBe(true);
       expect(content.approvedBy).toBe('slack:testuser');
@@ -257,7 +253,9 @@ describe('SlackWebhook', () => {
 
       writeFileSync(join(TEST_PENDING_DIR, `${mutationId}.json`), JSON.stringify(response));
 
-      const content = JSON.parse(readFileSync(join(TEST_PENDING_DIR, `${mutationId}.json`), 'utf-8'));
+      const content = JSON.parse(
+        readFileSync(join(TEST_PENDING_DIR, `${mutationId}.json`), 'utf-8')
+      );
 
       expect(content.approved).toBe(false);
       expect(content.reason).toBe('Rejected via Slack');

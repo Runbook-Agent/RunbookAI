@@ -7,7 +7,15 @@
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  unlinkSync,
+  readdirSync,
+  statSync,
+} from 'fs';
 import { join } from 'path';
 import { updateMessage } from '../tools/incident/slack';
 
@@ -84,9 +92,8 @@ function verifySlackSignature(
 
   // Compute signature
   const sigBaseString = `v0:${timestamp}:${body}`;
-  const mySignature = 'v0=' + createHmac('sha256', signingSecret)
-    .update(sigBaseString)
-    .digest('hex');
+  const mySignature =
+    'v0=' + createHmac('sha256', signingSecret).update(sigBaseString).digest('hex');
 
   // Timing-safe comparison
   try {
@@ -244,10 +251,12 @@ function createRequestHandler(config: WebhookServerConfig) {
           const result = await handleApprovalAction(payload, action, pendingDir);
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            response_action: 'clear',
-            text: result.message,
-          }));
+          res.end(
+            JSON.stringify({
+              response_action: 'clear',
+              text: result.message,
+            })
+          );
           return;
         }
       }
@@ -310,14 +319,15 @@ export function getWebhookConfigFromEnv(): WebhookServerConfig | null {
 /**
  * List pending approval requests
  */
-export function listPendingApprovals(pendingDir?: string): Array<{ mutationId: string; createdAt: string }> {
+export function listPendingApprovals(
+  pendingDir?: string
+): Array<{ mutationId: string; createdAt: string }> {
   const dir = pendingDir || join(process.cwd(), '.runbook', 'pending');
 
   if (!existsSync(dir)) {
     return [];
   }
 
-  const { readdirSync } = require('fs');
   const files = readdirSync(dir) as string[];
 
   return files
@@ -343,7 +353,6 @@ export function cleanupExpiredApprovals(maxAgeMs: number = 3600000, pendingDir?:
     return 0;
   }
 
-  const { readdirSync, statSync } = require('fs');
   const files = readdirSync(dir) as string[];
   const now = Date.now();
   let cleaned = 0;
