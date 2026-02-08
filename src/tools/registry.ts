@@ -67,6 +67,10 @@ import {
 } from '../agent/approval';
 import { loadConfig } from '../utils/config';
 import { createKubernetesClient } from '../providers/kubernetes/client';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 // Cached config for getting default regions
 let cachedDefaultRegion: string | null = null;
@@ -191,6 +195,158 @@ const categoryList = Object.entries(CATEGORY_DESCRIPTIONS)
   .map(([k, v]) => `  ${k}: ${v}`)
   .join('\n');
 
+interface AwsCliFallbackSpec {
+  serviceId: string;
+  cliService: string;
+  cliOperation: string;
+  buildArgs: (region: string, limit: number) => string[];
+  resultPath: string;
+  idField?: string;
+  nameField?: string;
+  statusField?: string;
+}
+
+const AWS_CLI_FALLBACK_SPECS: AwsCliFallbackSpec[] = [
+  {
+    serviceId: 'elb',
+    cliService: 'elbv2',
+    cliOperation: 'describe-load-balancers',
+    buildArgs: (region) => ['--region', region],
+    resultPath: 'LoadBalancers',
+    idField: 'LoadBalancerArn',
+    nameField: 'LoadBalancerName',
+    statusField: 'State.Code',
+  },
+  {
+    serviceId: 'apigateway',
+    cliService: 'apigateway',
+    cliOperation: 'get-rest-apis',
+    buildArgs: (region, limit) => ['--region', region, '--limit', String(limit)],
+    resultPath: 'items',
+    idField: 'id',
+    nameField: 'name',
+  },
+  {
+    serviceId: 'apigwv2',
+    cliService: 'apigatewayv2',
+    cliOperation: 'get-apis',
+    buildArgs: (region, limit) => ['--region', region, '--max-results', String(limit)],
+    resultPath: 'Items',
+    idField: 'ApiId',
+    nameField: 'Name',
+  },
+  {
+    serviceId: 'ecr',
+    cliService: 'ecr',
+    cliOperation: 'describe-repositories',
+    buildArgs: (region, limit) => ['--region', region, '--max-items', String(limit)],
+    resultPath: 'repositories',
+    idField: 'repositoryArn',
+    nameField: 'repositoryName',
+  },
+  {
+    serviceId: 'secretsmanager',
+    cliService: 'secretsmanager',
+    cliOperation: 'list-secrets',
+    buildArgs: (region, limit) => [
+      '--region',
+      region,
+      '--max-results',
+      String(Math.min(limit, 100)),
+    ],
+    resultPath: 'SecretList',
+    idField: 'ARN',
+    nameField: 'Name',
+  },
+  {
+    serviceId: 'sqs',
+    cliService: 'sqs',
+    cliOperation: 'list-queues',
+    buildArgs: (region) => ['--region', region],
+    resultPath: 'QueueUrls',
+    idField: '',
+  },
+];
+
+function getNestedValue(obj: unknown, path: string): unknown {
+  const parts = path.split('.');
+  let current: unknown = obj;
+  for (const part of parts) {
+    if (current === null || current === undefined || typeof current !== 'object') {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+function normalizeAwsCliResource(item: unknown, spec: AwsCliFallbackSpec): Record<string, unknown> {
+  if (typeof item === 'string') {
+    return { id: item };
+  }
+  if (typeof item !== 'object' || item === null) {
+    return { id: String(item) };
+  }
+
+  const obj = item as Record<string, unknown>;
+  const id = spec.idField ? getNestedValue(obj, spec.idField) : undefined;
+  const resource: Record<string, unknown> = {
+    id: id || JSON.stringify(item),
+  };
+
+  if (spec.nameField) {
+    const name = getNestedValue(obj, spec.nameField);
+    if (name !== undefined) resource.name = name;
+  }
+  if (spec.statusField) {
+    const status = getNestedValue(obj, spec.statusField);
+    if (status !== undefined) resource.status = status;
+  }
+
+  // Keep original payload available for deeper answers.
+  resource.raw = obj;
+  return resource;
+}
+
+async function runAwsCliFallback(
+  serviceId: string,
+  region: string,
+  limit: number
+): Promise<{
+  source: 'aws_cli_fallback';
+  command: string;
+  resources: Array<Record<string, unknown>>;
+  count: number;
+} | null> {
+  const spec = AWS_CLI_FALLBACK_SPECS.find((entry) => entry.serviceId === serviceId);
+  if (!spec) return null;
+
+  const args = [
+    spec.cliService,
+    spec.cliOperation,
+    ...spec.buildArgs(region, limit),
+    '--output',
+    'json',
+  ];
+
+  const { stdout } = await execFileAsync('aws', args, {
+    timeout: 30_000,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+
+  const parsed = JSON.parse(stdout) as Record<string, unknown>;
+  const rawResults = getNestedValue(parsed, spec.resultPath);
+  const resultArray = Array.isArray(rawResults) ? rawResults : [];
+  const resources = resultArray.slice(0, limit).map((item) => normalizeAwsCliResource(item, spec));
+
+  return {
+    source: 'aws_cli_fallback',
+    command: `aws ${args.join(' ')}`,
+    resources,
+    count: resources.length,
+  };
+}
+
 /**
  * AWS Query Tool - Dynamic meta-router for read-only AWS operations
  * Supports 40+ AWS services dynamically loaded from service definitions
@@ -299,9 +455,37 @@ ${categoryList}
       const output: Record<string, unknown> = {};
       let totalResources = 0;
       const errors: string[] = [];
+      const fallbacks: Array<{ service: string; source: string; command: string }> = [];
 
       for (const [serviceId, result] of Object.entries(results)) {
         if (result.error) {
+          if (result.error.includes('Failed to import')) {
+            try {
+              const fallbackResult = await runAwsCliFallback(serviceId, region, limit);
+              if (fallbackResult) {
+                output[serviceId] = {
+                  count: fallbackResult.count,
+                  resources: fallbackResult.resources,
+                  source: fallbackResult.source,
+                };
+                totalResources += fallbackResult.count;
+                fallbacks.push({
+                  service: serviceId,
+                  source: fallbackResult.source,
+                  command: fallbackResult.command,
+                });
+                continue;
+              }
+            } catch (fallbackError) {
+              errors.push(
+                `${serviceId}: SDK unavailable and aws_cli fallback failed: ${
+                  fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+                }`
+              );
+              continue;
+            }
+          }
+
           errors.push(`${serviceId}: ${result.error}`);
         } else if (result.count > 0) {
           output[serviceId] = {
@@ -317,6 +501,7 @@ ${categoryList}
         servicesQueried: Object.keys(results).length,
         results: output,
         errors: errors.length > 0 ? errors : undefined,
+        fallbacks: fallbacks.length > 0 ? fallbacks : undefined,
         _meta: {
           region: region,
           account: accountName || 'default',
