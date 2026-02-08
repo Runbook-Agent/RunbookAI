@@ -331,5 +331,5 @@ Configuration values are resolved in this order (highest priority first):
 
 ## Next Steps
 
-- [Architecture](/runbook/concepts/architecture/) - Understand how Runbook works
-- [CLI Reference](/runbook/cli/overview/) - Explore all commands
+- [Architecture](/RunbookAI/concepts/architecture/) - Understand how Runbook works
+- [CLI Reference](/RunbookAI/cli/overview/) - Explore all commands

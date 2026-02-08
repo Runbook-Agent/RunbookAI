@@ -409,5 +409,5 @@ steps:
 
 ## Next Steps
 
-- [CLI Reference](/runbook/cli/overview/) - Explore all commands
-- [Skills](/runbook/skills/overview/) - Understanding operational workflows
+- [CLI Reference](/RunbookAI/cli/overview/) - Explore all commands
+- [Skills](/RunbookAI/skills/overview/) - Understanding operational workflows

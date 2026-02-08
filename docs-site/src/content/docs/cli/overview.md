@@ -23,34 +23,34 @@ These options are available for all commands:
 
 | Command | Description |
 |---------|-------------|
-| [`ask`](/runbook/cli/ask/) | Ask natural language questions about infrastructure |
-| [`investigate`](/runbook/cli/investigate/) | Investigate incidents using hypothesis-driven analysis |
-| [`chat`](/runbook/cli/chat/) | Interactive multi-turn conversation |
-| [`deploy`](/runbook/cli/deploy/) | Deploy services using built-in skills |
-| [`status`](/runbook/cli/overview/#status) | Quick infrastructure health overview |
+| [`ask`](/RunbookAI/cli/ask/) | Ask natural language questions about infrastructure |
+| [`investigate`](/RunbookAI/cli/investigate/) | Investigate incidents using hypothesis-driven analysis |
+| [`chat`](/RunbookAI/cli/chat/) | Interactive multi-turn conversation |
+| [`deploy`](/RunbookAI/cli/deploy/) | Deploy services using built-in skills |
+| [`status`](/RunbookAI/cli/overview/#status) | Quick infrastructure health overview |
 
 ### Configuration Commands
 
 | Command | Description |
 |---------|-------------|
-| [`init`](/runbook/cli/init/) | Interactive setup wizard |
-| [`config`](/runbook/cli/config/) | View or modify configuration |
+| [`init`](/RunbookAI/cli/init/) | Interactive setup wizard |
+| [`config`](/RunbookAI/cli/config/) | View or modify configuration |
 
 ### Knowledge Commands
 
 | Command | Description |
 |---------|-------------|
-| [`knowledge sync`](/runbook/cli/knowledge/) | Sync knowledge from all sources |
-| [`knowledge search`](/runbook/cli/knowledge/) | Search the knowledge base |
-| [`knowledge add`](/runbook/cli/knowledge/) | Add a document to the knowledge base |
-| [`knowledge validate`](/runbook/cli/knowledge/) | Validate knowledge freshness |
-| [`knowledge stats`](/runbook/cli/knowledge/) | Show knowledge base statistics |
+| [`knowledge sync`](/RunbookAI/cli/knowledge/) | Sync knowledge from all sources |
+| [`knowledge search`](/RunbookAI/cli/knowledge/) | Search the knowledge base |
+| [`knowledge add`](/RunbookAI/cli/knowledge/) | Add a document to the knowledge base |
+| [`knowledge validate`](/RunbookAI/cli/knowledge/) | Validate knowledge freshness |
+| [`knowledge stats`](/RunbookAI/cli/knowledge/) | Show knowledge base statistics |
 
 ### Advanced Commands
 
 | Command | Description |
 |---------|-------------|
-| [`webhook`](/runbook/cli/webhook/) | Start Slack webhook server |
+| [`webhook`](/RunbookAI/cli/webhook/) | Start Slack webhook server |
 
 ## Quick Examples
 
@@ -161,6 +161,6 @@ runbook completion fish > ~/.config/fish/completions/runbook.fish
 ## Next Steps
 
 Explore individual commands:
-- [ask](/runbook/cli/ask/) - Query infrastructure
-- [investigate](/runbook/cli/investigate/) - Investigate incidents
-- [chat](/runbook/cli/chat/) - Interactive mode
+- [ask](/RunbookAI/cli/ask/) - Query infrastructure
+- [investigate](/RunbookAI/cli/investigate/) - Investigate incidents
+- [chat](/RunbookAI/cli/chat/) - Interactive mode

@@ -168,5 +168,5 @@ Error: Incident PD-12345 not found
 
 ## Next Steps
 
-- [OpsGenie Integration](/runbook/integrations/opsgenie/) - Alternative incident management
-- [Slack Integration](/runbook/integrations/slack/) - Notifications and approvals
+- [OpsGenie Integration](/RunbookAI/integrations/opsgenie/) - Alternative incident management
+- [Slack Integration](/RunbookAI/integrations/slack/) - Notifications and approvals

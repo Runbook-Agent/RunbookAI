@@ -323,5 +323,5 @@ Related: payment-api, checkout-api, order-service
 
 ## Next Steps
 
-- [deploy](/runbook/cli/deploy/) - Deploy services
-- [knowledge](/runbook/cli/knowledge/) - Manage knowledge base
+- [deploy](/RunbookAI/cli/deploy/) - Deploy services
+- [knowledge](/RunbookAI/cli/knowledge/) - Manage knowledge base

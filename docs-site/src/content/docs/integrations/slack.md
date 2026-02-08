@@ -119,7 +119,7 @@ A user reviews and clicks Approve or Deny.
 
 ### 3. Webhook Processes
 
-The [webhook server](/runbook/cli/webhook/) receives the interaction and:
+The [webhook server](/RunbookAI/cli/webhook/) receives the interaction and:
 - Verifies the signature
 - Records the approval/denial
 - Notifies the agent
@@ -195,7 +195,7 @@ For interactive features (buttons), run the webhook server:
 runbook webhook --port 3000
 ```
 
-See [webhook command](/runbook/cli/webhook/) for details.
+See [webhook command](/RunbookAI/cli/webhook/) for details.
 
 ## Message Formatting
 
@@ -249,5 +249,5 @@ Error: not_authed
 
 ## Next Steps
 
-- [webhook Command](/runbook/cli/webhook/) - Set up webhook server
-- [Safety & Approvals](/runbook/concepts/safety/) - Understanding approvals
+- [webhook Command](/RunbookAI/cli/webhook/) - Set up webhook server
+- [Safety & Approvals](/RunbookAI/concepts/safety/) - Understanding approvals

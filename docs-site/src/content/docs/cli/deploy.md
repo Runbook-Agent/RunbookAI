@@ -253,5 +253,5 @@ Use in CI/CD pipelines:
 
 ## Next Steps
 
-- [knowledge](/runbook/cli/knowledge/) - Manage knowledge base
-- [Skills](/runbook/skills/overview/) - Understanding deployment skills
+- [knowledge](/RunbookAI/cli/knowledge/) - Manage knowledge base
+- [Skills](/RunbookAI/skills/overview/) - Understanding deployment skills

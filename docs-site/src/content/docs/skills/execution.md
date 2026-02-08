@@ -300,5 +300,5 @@ On cancellation:
 
 ## Next Steps
 
-- [Custom Skills](/runbook/skills/custom/) - Create your own skills
-- [Safety & Approvals](/runbook/concepts/safety/) - Approval system details
+- [Custom Skills](/RunbookAI/skills/custom/) - Create your own skills
+- [Safety & Approvals](/RunbookAI/concepts/safety/) - Approval system details

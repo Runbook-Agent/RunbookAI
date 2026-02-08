@@ -281,5 +281,5 @@ Grant RBAC permissions:
 
 ## Next Steps
 
-- [Kubernetes Tools](/runbook/tools/kubernetes/) - Detailed tool reference
-- [AWS Integration](/runbook/integrations/aws/) - Configure AWS
+- [Kubernetes Tools](/RunbookAI/tools/kubernetes/) - Detailed tool reference
+- [AWS Integration](/RunbookAI/integrations/aws/) - Configure AWS

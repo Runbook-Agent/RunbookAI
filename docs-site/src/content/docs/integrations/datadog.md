@@ -172,5 +172,5 @@ Application key should have:
 
 ## Next Steps
 
-- [Prometheus Integration](/runbook/integrations/prometheus/) - Alternative metrics source
-- [Observability Tools](/runbook/tools/observability/) - Tool reference
+- [Prometheus Integration](/RunbookAI/integrations/prometheus/) - Alternative metrics source
+- [Observability Tools](/RunbookAI/tools/observability/) - Tool reference

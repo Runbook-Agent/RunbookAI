@@ -293,9 +293,9 @@ Before publishing a runbook:
 
 ## Example: Complete Runbook
 
-See the [example runbook](https://github.com/manthanthakar/runbook/blob/main/examples/runbooks/redis-connection-exhaustion.md) in the repository for a full example.
+See the [example runbook](https://github.com/manthanthakar/RunbookAI/blob/main/examples/runbooks/redis-connection-exhaustion.md) in the repository for a full example.
 
 ## Next Steps
 
-- [Document Types](/runbook/knowledge/document-types/) - Other document types
-- [Search & Retrieval](/runbook/knowledge/search/) - How documents are found
+- [Document Types](/RunbookAI/knowledge/document-types/) - Other document types
+- [Search & Retrieval](/RunbookAI/knowledge/search/) - How documents are found

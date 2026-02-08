@@ -289,5 +289,5 @@ src/
 
 ## Next Steps
 
-- [Investigation Flow](/runbook/concepts/investigation-flow/) - Deep dive into the investigation process
-- [Hypothesis System](/runbook/concepts/hypothesis/) - Understanding hypothesis-driven investigation
+- [Investigation Flow](/RunbookAI/concepts/investigation-flow/) - Deep dive into the investigation process
+- [Hypothesis System](/RunbookAI/concepts/hypothesis/) - Understanding hypothesis-driven investigation

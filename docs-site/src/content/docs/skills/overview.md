@@ -198,6 +198,6 @@ skills:
 
 ## Next Steps
 
-- [Built-in Skills](/runbook/skills/builtin/) - Available skills
-- [Custom Skills](/runbook/skills/custom/) - Create your own
-- [Execution Model](/runbook/skills/execution/) - How skills run
+- [Built-in Skills](/RunbookAI/skills/builtin/) - Available skills
+- [Custom Skills](/RunbookAI/skills/custom/) - Create your own
+- [Execution Model](/RunbookAI/skills/execution/) - How skills run

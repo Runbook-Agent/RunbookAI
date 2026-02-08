@@ -150,6 +150,6 @@ Applying knowledge to investigation...
 
 ## Next Steps
 
-- [Document Types](/runbook/knowledge/document-types/) - Understanding each type
-- [Sources](/runbook/knowledge/sources/) - Configure knowledge sources
-- [Writing Runbooks](/runbook/knowledge/writing-runbooks/) - Best practices
+- [Document Types](/RunbookAI/knowledge/document-types/) - Understanding each type
+- [Sources](/RunbookAI/knowledge/sources/) - Configure knowledge sources
+- [Writing Runbooks](/RunbookAI/knowledge/writing-runbooks/) - Best practices

@@ -318,5 +318,5 @@ Check:
 
 ## Next Steps
 
-- [Safety & Approvals](/runbook/concepts/safety/) - Understanding the approval system
-- [Slack Integration](/runbook/integrations/slack/) - Full Slack setup guide
+- [Safety & Approvals](/RunbookAI/concepts/safety/) - Understanding the approval system
+- [Slack Integration](/RunbookAI/integrations/slack/) - Full Slack setup guide

@@ -138,5 +138,5 @@ runbook ask "What alerts were acknowledged in the last hour?"
 
 ## Next Steps
 
-- [PagerDuty Integration](/runbook/integrations/pagerduty/) - Alternative incident management
-- [Slack Integration](/runbook/integrations/slack/) - Notifications and approvals
+- [PagerDuty Integration](/RunbookAI/integrations/pagerduty/) - Alternative incident management
+- [Slack Integration](/RunbookAI/integrations/slack/) - Notifications and approvals

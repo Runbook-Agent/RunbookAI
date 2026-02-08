@@ -165,11 +165,11 @@ registerTool({
 
 Each tool category has detailed documentation:
 
-- [AWS Tools](/runbook/tools/aws/) - 40+ AWS services
-- [Kubernetes Tools](/runbook/tools/kubernetes/) - Cluster operations
-- [Incident Tools](/runbook/tools/incident/) - PagerDuty, OpsGenie, Slack
-- [Observability Tools](/runbook/tools/observability/) - Datadog, Prometheus
-- [Knowledge Tools](/runbook/tools/knowledge/) - Knowledge base search
+- [AWS Tools](/RunbookAI/tools/aws/) - 40+ AWS services
+- [Kubernetes Tools](/RunbookAI/tools/kubernetes/) - Cluster operations
+- [Incident Tools](/RunbookAI/tools/incident/) - PagerDuty, OpsGenie, Slack
+- [Observability Tools](/RunbookAI/tools/observability/) - Datadog, Prometheus
+- [Knowledge Tools](/RunbookAI/tools/knowledge/) - Knowledge base search
 
 ## Next Steps
 

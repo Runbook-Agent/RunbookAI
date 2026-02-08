@@ -334,5 +334,5 @@ agent:
 
 ## Next Steps
 
-- [Evidence & Confidence](/runbook/concepts/evidence/) - Deep dive into evidence evaluation
-- [Safety & Approvals](/runbook/concepts/safety/) - Understanding the approval system
+- [Evidence & Confidence](/RunbookAI/concepts/evidence/) - Deep dive into evidence evaluation
+- [Safety & Approvals](/RunbookAI/concepts/safety/) - Understanding the approval system

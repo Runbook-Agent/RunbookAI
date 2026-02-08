@@ -306,5 +306,5 @@ remediate → complete       // After actions executed
 
 ## Next Steps
 
-- [Hypothesis System](/runbook/concepts/hypothesis/) - Deep dive into hypothesis management
-- [Evidence & Confidence](/runbook/concepts/evidence/) - Understanding evidence evaluation
+- [Hypothesis System](/RunbookAI/concepts/hypothesis/) - Deep dive into hypothesis management
+- [Evidence & Confidence](/RunbookAI/concepts/evidence/) - Understanding evidence evaluation

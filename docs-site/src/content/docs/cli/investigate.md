@@ -323,5 +323,5 @@ To resume: runbook investigate --resume session-abc
 
 ## Next Steps
 
-- [chat](/runbook/cli/chat/) - For interactive investigations
-- [Hypothesis System](/runbook/concepts/hypothesis/) - Understanding the methodology
+- [chat](/RunbookAI/cli/chat/) - For interactive investigations
+- [Hypothesis System](/RunbookAI/concepts/hypothesis/) - Understanding the methodology

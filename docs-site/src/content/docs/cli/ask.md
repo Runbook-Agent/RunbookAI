@@ -289,5 +289,5 @@ The query was too broad. Try:
 
 ## Next Steps
 
-- [investigate](/runbook/cli/investigate/) - For incident investigation
-- [chat](/runbook/cli/chat/) - For interactive sessions
+- [investigate](/RunbookAI/cli/investigate/) - For incident investigation
+- [chat](/RunbookAI/cli/chat/) - For interactive sessions

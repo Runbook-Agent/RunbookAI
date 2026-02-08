@@ -358,5 +358,5 @@ lastValidated: 2024-01-15
 
 ## Next Steps
 
-- [Writing Runbooks](/runbook/knowledge/writing-runbooks/) - Best practices for runbooks
-- [Knowledge Sources](/runbook/knowledge/sources/) - Configure knowledge sources
+- [Writing Runbooks](/RunbookAI/knowledge/writing-runbooks/) - Best practices for runbooks
+- [Knowledge Sources](/RunbookAI/knowledge/sources/) - Configure knowledge sources

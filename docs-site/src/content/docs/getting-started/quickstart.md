@@ -230,6 +230,6 @@ Deployment successful!
 
 Now that you've seen Runbook in action:
 
-- [Configuration](/runbook/getting-started/configuration/) - Customize for your environment
-- [Core Concepts](/runbook/concepts/architecture/) - Understand the architecture
-- [CLI Reference](/runbook/cli/overview/) - Explore all commands
+- [Configuration](/RunbookAI/getting-started/configuration/) - Customize for your environment
+- [Core Concepts](/RunbookAI/concepts/architecture/) - Understand the architecture
+- [CLI Reference](/RunbookAI/cli/overview/) - Explore all commands

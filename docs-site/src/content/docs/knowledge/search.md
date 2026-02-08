@@ -220,5 +220,5 @@ Applying knowledge to hypothesis formation...
 
 ## Next Steps
 
-- [Writing Runbooks](/runbook/knowledge/writing-runbooks/) - Create effective runbooks
-- [Document Types](/runbook/knowledge/document-types/) - Understanding types
+- [Writing Runbooks](/RunbookAI/knowledge/writing-runbooks/) - Create effective runbooks
+- [Document Types](/RunbookAI/knowledge/document-types/) - Understanding types

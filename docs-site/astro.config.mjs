@@ -4,8 +4,8 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
-	site: 'https://manthanthakar.github.io',
-	base: '/runbook',
+	site: 'https://manthan787.github.io',
+	base: '/RunbookAI',
 	integrations: [
 		starlight({
 			title: 'Runbook',
@@ -16,7 +16,7 @@ export default defineConfig({
 				replacesTitle: false,
 			},
 			social: [
-				{ icon: 'github', label: 'GitHub', href: 'https://github.com/manthanthakar/runbook' },
+				{ icon: 'github', label: 'GitHub', href: 'https://github.com/manthan787/RunbookAI' },
 			],
 			customCss: [
 				'./src/styles/custom.css',
@@ -26,7 +26,7 @@ export default defineConfig({
 					tag: 'meta',
 					attrs: {
 						name: 'og:image',
-						content: 'https://manthanthakar.github.io/runbook/og-image.png',
+						content: 'https://manthan787.github.io/RunbookAI/og-image.png',
 					},
 				},
 				{
@@ -38,7 +38,7 @@ export default defineConfig({
 				},
 			],
 			editLink: {
-				baseUrl: 'https://github.com/manthanthakar/runbook/edit/main/docs-site/',
+				baseUrl: 'https://github.com/manthan787/RunbookAI/edit/main/docs-site/',
 			},
 			sidebar: [
 				{

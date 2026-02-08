@@ -288,5 +288,5 @@ All documents support these common fields:
 
 ## Next Steps
 
-- [Sources](/runbook/knowledge/sources/) - Configure where to find documents
-- [Writing Runbooks](/runbook/knowledge/writing-runbooks/) - Best practices
+- [Sources](/RunbookAI/knowledge/sources/) - Configure where to find documents
+- [Writing Runbooks](/RunbookAI/knowledge/writing-runbooks/) - Best practices

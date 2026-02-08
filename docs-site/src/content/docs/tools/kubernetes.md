@@ -210,4 +210,4 @@ For mutations, use skills or manual kubectl commands.
 - Valid kubeconfig
 - RBAC permissions for queries
 
-See [Kubernetes Integration](/runbook/integrations/kubernetes/) for setup details.
+See [Kubernetes Integration](/RunbookAI/integrations/kubernetes/) for setup details.

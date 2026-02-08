@@ -259,5 +259,5 @@ skills:
 
 ## Next Steps
 
-- [Custom Skills](/runbook/skills/custom/) - Create your own
-- [Execution Model](/runbook/skills/execution/) - How skills run
+- [Custom Skills](/RunbookAI/skills/custom/) - Create your own
+- [Execution Model](/RunbookAI/skills/execution/) - How skills run

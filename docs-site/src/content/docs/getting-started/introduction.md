@@ -96,4 +96,4 @@ Incident Alert
 
 ## Next Steps
 
-Ready to get started? Head to the [Installation](/runbook/getting-started/installation/) guide to set up Runbook in your environment.
+Ready to get started? Head to the [Installation](/RunbookAI/getting-started/installation/) guide to set up Runbook in your environment.

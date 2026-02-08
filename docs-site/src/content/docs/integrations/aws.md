@@ -273,5 +273,5 @@ providers:
 
 ## Next Steps
 
-- [Kubernetes Integration](/runbook/integrations/kubernetes/) - Configure Kubernetes
-- [AWS Tools](/runbook/tools/aws/) - Detailed tool reference
+- [Kubernetes Integration](/RunbookAI/integrations/kubernetes/) - Configure Kubernetes
+- [AWS Tools](/RunbookAI/tools/aws/) - Detailed tool reference

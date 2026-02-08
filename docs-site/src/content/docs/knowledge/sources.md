@@ -291,5 +291,5 @@ Error: Failed to parse document.md
 
 ## Next Steps
 
-- [Search & Retrieval](/runbook/knowledge/search/) - Using the knowledge base
-- [Writing Runbooks](/runbook/knowledge/writing-runbooks/) - Best practices
+- [Search & Retrieval](/RunbookAI/knowledge/search/) - Using the knowledge base
+- [Writing Runbooks](/RunbookAI/knowledge/writing-runbooks/) - Best practices

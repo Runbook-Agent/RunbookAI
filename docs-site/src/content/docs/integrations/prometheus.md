@@ -175,5 +175,5 @@ The query syntax was invalid. Check:
 
 ## Next Steps
 
-- [Datadog Integration](/runbook/integrations/datadog/) - Alternative observability
-- [Observability Tools](/runbook/tools/observability/) - Tool reference
+- [Datadog Integration](/RunbookAI/integrations/datadog/) - Alternative observability
+- [Observability Tools](/RunbookAI/tools/observability/) - Tool reference

@@ -434,5 +434,5 @@ agent:
 
 ## Next Steps
 
-- [Safety & Approvals](/runbook/concepts/safety/) - Understanding the approval system
-- [CLI Reference](/runbook/cli/overview/) - Explore all commands
+- [Safety & Approvals](/RunbookAI/concepts/safety/) - Understanding the approval system
+- [CLI Reference](/RunbookAI/cli/overview/) - Explore all commands

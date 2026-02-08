@@ -237,5 +237,5 @@ runbook config --import new-settings.json --merge
 
 ## Next Steps
 
-- [Configuration Reference](/runbook/getting-started/configuration/) - Full configuration documentation
-- [init](/runbook/cli/init/) - Interactive setup wizard
+- [Configuration Reference](/RunbookAI/getting-started/configuration/) - Full configuration documentation
+- [init](/RunbookAI/cli/init/) - Interactive setup wizard

@@ -296,5 +296,5 @@ runbook skill run my-skill --dry-run \
 
 ## Next Steps
 
-- [Execution Model](/runbook/skills/execution/) - How skills run
-- [Built-in Skills](/runbook/skills/builtin/) - Reference implementations
+- [Execution Model](/RunbookAI/skills/execution/) - How skills run
+- [Built-in Skills](/RunbookAI/skills/builtin/) - Reference implementations
