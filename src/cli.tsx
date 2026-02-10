@@ -66,15 +66,7 @@ function createAgentKnowledgeRetriever() {
   };
 }
 
-interface RuntimeAgentOptions {
-  useCache?: boolean;
-  explainMode?: boolean;
-}
-
-async function createRuntimeAgent(
-  config: Awaited<ReturnType<typeof loadConfig>>,
-  options: RuntimeAgentOptions = {}
-): Promise<Agent> {
+async function createRuntimeAgent(config: Awaited<ReturnType<typeof loadConfig>>): Promise<Agent> {
   const llm = createLLMClient({
     provider: config.llm.provider,
     model: config.llm.model,
@@ -95,10 +87,6 @@ async function createRuntimeAgent(
       maxHypothesisDepth: config.agent.maxHypothesisDepth,
       contextThresholdTokens: config.agent.contextThresholdTokens,
     },
-    // Speed and trust features
-    cache: options.useCache !== false ? {} : false,
-    parallelExecution: {}, // Always enable parallel execution
-    explainMode: options.explainMode ?? false,
   });
 }
 
@@ -109,18 +97,14 @@ interface AgentUIProps {
   query: string;
   incidentId?: string;
   verbose: boolean;
-  useCache?: boolean;
-  explainMode?: boolean;
-  showTree?: boolean;
 }
 
-function AgentUI({ query, incidentId, verbose, useCache = true, explainMode = false, showTree = false }: AgentUIProps) {
+function AgentUI({ query, incidentId, verbose }: AgentUIProps) {
   const [status, setStatus] = useState<'loading' | 'thinking' | 'tool' | 'done'>('loading');
   const [currentTool, setCurrentTool] = useState<string | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [answer, setAnswer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [explainSteps, setExplainSteps] = useState<Array<{ phase: string; description: string }>>([]);
 
   useEffect(() => {
     runAgent();
@@ -137,8 +121,8 @@ function AgentUI({ query, incidentId, verbose, useCache = true, explainMode = fa
         return;
       }
 
-      // Create agent with cache and explain mode options
-      const agent = await createRuntimeAgent(config, { useCache, explainMode });
+      // Create agent
+      const agent = await createRuntimeAgent(config);
 
       // Run agent and process events
       for await (const event of agent.run(query, incidentId)) {
@@ -160,11 +144,6 @@ function AgentUI({ query, incidentId, verbose, useCache = true, explainMode = fa
             setCurrentTool(null);
             setStatus('thinking');
             break;
-          case 'explain_step':
-            if (explainMode) {
-              setExplainSteps((prev) => [...prev, { phase: event.phase, description: event.description }]);
-            }
-            break;
           case 'done':
             setAnswer(event.answer);
             setStatus('done');
@@ -179,29 +158,18 @@ function AgentUI({ query, incidentId, verbose, useCache = true, explainMode = fa
 
   // Render past events (static, won't re-render)
   const pastEvents = verbose
-    ? events.filter((e) => e.type !== 'done' && e.type !== 'explain_step').slice(0, -1)
+    ? events.filter((e) => e.type !== 'done').slice(0, -1)
     : events.filter((e) => e.type === 'tool_end');
 
   return (
     <Box flexDirection="column">
-      {/* Explain steps if enabled */}
-      {explainMode && explainSteps.length > 0 && (
-        <Static items={explainSteps}>
-          {(step, index) => (
-            <Box key={index}>
-              <Text color="magenta">[{step.phase.toUpperCase()}] {step.description}</Text>
-            </Box>
-          )}
-        </Static>
-      )}
-
       {/* Static past events */}
       <Static items={pastEvents}>
         {(event, index) => (
           <Box key={index}>
             {event.type === 'tool_end' && (
               <Text color="green">
-                {'\u2713'} {event.tool} ({event.durationMs}ms){event.fromCache ? ' (cached)' : ''}
+                ✓ {event.tool} ({event.durationMs}ms)
               </Text>
             )}
             {verbose && event.type === 'thinking' && (
@@ -262,7 +230,7 @@ function AgentUI({ query, incidentId, verbose, useCache = true, explainMode = fa
 /**
  * Simple text-only mode for non-TTY environments
  */
-async function runSimple(query: string, incidentId?: string, options: RuntimeAgentOptions = {}) {
+async function runSimple(query: string, incidentId?: string) {
   console.log(chalk.cyan('Runbook Agent'));
   console.log(chalk.gray('─'.repeat(40)));
   console.log(`Query: ${query}`);
@@ -280,7 +248,7 @@ async function runSimple(query: string, incidentId?: string, options: RuntimeAge
       process.exit(1);
     }
 
-    const agent = await createRuntimeAgent(config, options);
+    const agent = await createRuntimeAgent(config);
 
     for await (const event of agent.run(query, incidentId)) {
       switch (event.type) {
@@ -288,15 +256,10 @@ async function runSimple(query: string, incidentId?: string, options: RuntimeAge
           console.log(chalk.blue(`→ ${event.tool}`));
           break;
         case 'tool_end':
-          console.log(chalk.green(`✓ ${event.tool} (${event.durationMs}ms)${event.fromCache ? ' (cached)' : ''}`));
+          console.log(chalk.green(`✓ ${event.tool} (${event.durationMs}ms)`));
           break;
         case 'tool_error':
           console.log(chalk.red(`✗ ${event.tool}: ${event.error}`));
-          break;
-        case 'explain_step':
-          if (options.explainMode) {
-            console.log(chalk.magenta(`[${event.phase.toUpperCase()}] ${event.description}`));
-          }
           break;
         case 'done':
           console.log();
@@ -1022,17 +985,13 @@ program
   .command('ask <query...>')
   .description('Ask a question about your infrastructure')
   .option('-v, --verbose', 'Show detailed output')
-  .option('--no-cache', 'Disable result caching')
-  .option('--explain', 'Show detailed reasoning steps')
-  .action(async (queryParts: string[], options: { verbose?: boolean; cache?: boolean; explain?: boolean }) => {
+  .action(async (queryParts: string[], options: { verbose?: boolean }) => {
     const query = queryParts.join(' ');
-    const useCache = options.cache !== false;
-    const explainMode = options.explain || false;
 
     if (process.stdout.isTTY) {
-      render(<AgentUI query={query} verbose={options.verbose || false} useCache={useCache} explainMode={explainMode} />);
+      render(<AgentUI query={query} verbose={options.verbose || false} />);
     } else {
-      await runSimple(query, undefined, { useCache, explainMode });
+      await runSimple(query);
     }
   });
 
@@ -1064,9 +1023,6 @@ program
     '--apply-runbook-updates',
     'Apply generated runbook updates/new runbooks into .runbook/runbooks (requires --learn)'
   )
-  .option('--no-cache', 'Disable result caching')
-  .option('--tree', 'Show hypothesis tree visualization')
-  .option('--explain', 'Show detailed reasoning steps during investigation')
   .action(
     async (
       incidentId: string,
@@ -1075,9 +1031,6 @@ program
         autoRemediate?: boolean;
         learn?: boolean;
         applyRunbookUpdates?: boolean;
-        cache?: boolean;
-        tree?: boolean;
-        explain?: boolean;
       }
     ) => {
       if (options.applyRunbookUpdates && !options.learn) {
