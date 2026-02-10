@@ -9,22 +9,22 @@ CREATE_PD_INCIDENT=0
 FORCE_ALARM=1
 SKIP_SYNC=0
 REGION="${AWS_REGION:-us-east-1}"
-PREFIX="${RUNBOOK_DEMO_PREFIX:-runbook-yc-demo}"
+PREFIX="${RUNBOOK_SIM_PREFIX:-runbook-sim-incidents}"
 
 usage() {
   cat <<USAGE
-Usage: scripts/demo/setup-yc-demo.sh [options]
+Usage: scripts/simulate/setup-incidents.sh [options]
 
-Creates demo knowledge documents for chat, then optionally provisions a controlled AWS failure
+Creates simulation knowledge documents for chat, then optionally provisions a controlled AWS failure
 scenario for recording runbook investigate.
 
 Options:
-  --with-aws             Provision AWS demo resources (Lambda + CloudWatch alarm)
+  --with-aws             Provision AWS simulation resources (Lambda + CloudWatch alarm)
   --create-pd-incident   Create a PagerDuty incident (requires --with-aws and PD env vars)
   --no-force-alarm       Do not force CloudWatch alarm state to ALARM immediately
   --skip-sync            Skip running "npm run dev -- knowledge sync"
   --region <region>      AWS region (default: AWS_REGION or us-east-1)
-  --prefix <prefix>      Resource prefix (default: runbook-yc-demo)
+  --prefix <prefix>      Resource prefix (default: runbook-sim-incidents)
   -h, --help             Show this help
 
 Required env for --create-pd-incident:
@@ -40,16 +40,16 @@ USAGE
 }
 
 log() {
-  printf '[demo-setup] %s\n' "$*"
+  printf '[simulate-setup] %s\n' "$*"
 }
 
 warn() {
-  printf '[demo-setup] WARN: %s\n' "$*" >&2
+  printf '[simulate-setup] WARN: %s\n' "$*" >&2
 }
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    printf '[demo-setup] ERROR: missing required command: %s\n' "$1" >&2
+    printf '[simulate-setup] ERROR: missing required command: %s\n' "$1" >&2
     exit 1
   fi
 }
@@ -112,11 +112,11 @@ parse_args() {
   fi
 }
 
-setup_demo_knowledge() {
-  local runbook_dir="$ROOT_DIR/.runbook/runbooks/yc-demo"
+setup_simulation_knowledge() {
+  local runbook_dir="$ROOT_DIR/.runbook/runbooks/simulate-incidents"
   mkdir -p "$runbook_dir"
 
-  log "Writing demo runbooks to $runbook_dir"
+  log "Writing simulation runbooks to $runbook_dir"
 
   cat > "$runbook_dir/checkout-command-failure-runbook.md" <<'RUNBOOK'
 ---
@@ -297,11 +297,11 @@ setup_aws_failure() {
 import os
 import subprocess
 
-BAD_COMMAND = os.environ.get("DEMO_BAD_COMMAND", "migrate-db")
+BAD_COMMAND = os.environ.get("SIM_BAD_COMMAND", "migrate-db")
 
 
 def handler(event, context):
-    print(f"Running failing demo command: {BAD_COMMAND}")
+    print(f"Running failing simulation command: {BAD_COMMAND}")
     subprocess.run([BAD_COMMAND, "--version"], check=True, capture_output=True, text=True)
     return {"ok": True}
 PY
@@ -356,7 +356,7 @@ JSON
       --handler lambda_function.handler \
       --timeout 15 \
       --memory-size 128 \
-      --environment "Variables={DEMO_BAD_COMMAND=migrate-db}" \
+      --environment "Variables={SIM_BAD_COMMAND=migrate-db}" \
       --region "$REGION" >/dev/null
   else
     log "Creating Lambda: $function_name"
@@ -368,7 +368,7 @@ JSON
       --zip-file "fileb://$tmp_dir/function.zip" \
       --timeout 15 \
       --memory-size 128 \
-      --environment "Variables={DEMO_BAD_COMMAND=migrate-db}" \
+      --environment "Variables={SIM_BAD_COMMAND=migrate-db}" \
       --region "$REGION" >/dev/null
   fi
 
@@ -403,7 +403,7 @@ JSON
   log "Creating/updating CloudWatch alarm: $alarm_name"
   aws cloudwatch put-metric-alarm \
     --alarm-name "$alarm_name" \
-    --alarm-description 'Runbook YC demo alarm: failing command not found in Lambda worker' \
+    --alarm-description 'Runbook incident simulation alarm: failing command not found in Lambda worker' \
     --namespace AWS/Lambda \
     --metric-name Errors \
     --dimensions "Name=FunctionName,Value=${function_name}" \
@@ -424,26 +424,26 @@ JSON
     "$tmp_dir/invoke-output.json" >/dev/null || true
 
   if [[ "$FORCE_ALARM" -eq 1 ]]; then
-    log 'Forcing alarm state to ALARM for deterministic demo timing'
+    log 'Forcing alarm state to ALARM for deterministic simulation timing'
     aws cloudwatch set-alarm-state \
       --alarm-name "$alarm_name" \
       --state-value ALARM \
-      --state-reason "Runbook YC demo forced ALARM at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --state-reason "Runbook incident simulation forced ALARM at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       --region "$REGION"
   fi
 
-  mkdir -p "$ROOT_DIR/.runbook/demo"
-  cat > "$ROOT_DIR/.runbook/demo/yc-demo.env" <<ENV
+  mkdir -p "$ROOT_DIR/.runbook/simulate"
+  cat > "$ROOT_DIR/.runbook/simulate/incidents.env" <<ENV
 AWS_REGION=${REGION}
-RUNBOOK_DEMO_PREFIX=${PREFIX}
-RUNBOOK_DEMO_FUNCTION=${function_name}
-RUNBOOK_DEMO_RULE=${rule_name}
-RUNBOOK_DEMO_ALARM=${alarm_name}
-RUNBOOK_DEMO_TOPIC=${topic_arn}
-RUNBOOK_DEMO_LOG_GROUP=${log_group_name}
+RUNBOOK_SIM_PREFIX=${PREFIX}
+RUNBOOK_SIM_FUNCTION=${function_name}
+RUNBOOK_SIM_RULE=${rule_name}
+RUNBOOK_SIM_ALARM=${alarm_name}
+RUNBOOK_SIM_TOPIC=${topic_arn}
+RUNBOOK_SIM_LOG_GROUP=${log_group_name}
 ENV
 
-  log "AWS demo resources ready. Wrote .runbook/demo/yc-demo.env"
+  log "AWS simulation resources ready. Wrote .runbook/simulate/incidents.env"
 }
 
 create_pagerduty_incident() {
@@ -457,9 +457,9 @@ create_pagerduty_incident() {
 
   local function_name="${PREFIX}-failing-worker"
   local alarm_name="${PREFIX}-lambda-errors"
-  local incident_title="[Runbook Demo] checkout-api command not found causing failures"
+  local incident_title="[Runbook Simulation] checkout-api command not found causing failures"
 
-  mkdir -p "$ROOT_DIR/.runbook/demo"
+  mkdir -p "$ROOT_DIR/.runbook/simulate"
 
   if [[ -n "$routing_key" ]]; then
     log 'Triggering PagerDuty alert via Events API'
@@ -486,7 +486,7 @@ JSON
     dedup_key="$(printf '%s' "$event_response" | node -e 'let data="";process.stdin.on("data",(c)=>data+=c);process.stdin.on("end",()=>{try{const json=JSON.parse(data);if(json.dedup_key){process.stdout.write(String(json.dedup_key));}}catch(e){}});')"
 
     if [[ -n "$dedup_key" ]]; then
-      echo "PAGERDUTY_DEMO_EVENT_DEDUP_KEY=${dedup_key}" >> "$ROOT_DIR/.runbook/demo/yc-demo.env"
+      echo "PAGERDUTY_SIM_EVENT_DEDUP_KEY=${dedup_key}" >> "$ROOT_DIR/.runbook/simulate/incidents.env"
     fi
 
     if [[ -n "$api_key" ]]; then
@@ -500,23 +500,23 @@ JSON
         --data-urlencode 'limit=25')"
 
       local pd_incident_id
-      pd_incident_id="$(printf '%s' "$incidents_response" | node -e 'let data="";process.stdin.on("data",(c)=>data+=c);process.stdin.on("end",()=>{try{const json=JSON.parse(data);const incidents=Array.isArray(json.incidents)?json.incidents:[];const match=incidents.find((i)=>typeof i.title==="string"&&i.title.includes("[Runbook Demo]"))||incidents[0];if(match&&match.id)process.stdout.write(String(match.id));}catch(e){}});')"
+      pd_incident_id="$(printf '%s' "$incidents_response" | node -e 'let data="";process.stdin.on("data",(c)=>data+=c);process.stdin.on("end",()=>{try{const json=JSON.parse(data);const incidents=Array.isArray(json.incidents)?json.incidents:[];const match=incidents.find((i)=>typeof i.title==="string"&&i.title.includes("[Runbook Simulation]"))||incidents[0];if(match&&match.id)process.stdout.write(String(match.id));}catch(e){}});')"
 
       local pd_incident_number
-      pd_incident_number="$(printf '%s' "$incidents_response" | node -e 'let data="";process.stdin.on("data",(c)=>data+=c);process.stdin.on("end",()=>{try{const json=JSON.parse(data);const incidents=Array.isArray(json.incidents)?json.incidents:[];const match=incidents.find((i)=>typeof i.title==="string"&&i.title.includes("[Runbook Demo]"))||incidents[0];if(match&&match.incident_number)process.stdout.write(String(match.incident_number));}catch(e){}});')"
+      pd_incident_number="$(printf '%s' "$incidents_response" | node -e 'let data="";process.stdin.on("data",(c)=>data+=c);process.stdin.on("end",()=>{try{const json=JSON.parse(data);const incidents=Array.isArray(json.incidents)?json.incidents:[];const match=incidents.find((i)=>typeof i.title==="string"&&i.title.includes("[Runbook Simulation]"))||incidents[0];if(match&&match.incident_number)process.stdout.write(String(match.incident_number));}catch(e){}});')"
 
       if [[ -n "$pd_incident_id" ]]; then
         {
-          echo "PAGERDUTY_DEMO_INCIDENT_ID=${pd_incident_id}"
-          echo "PAGERDUTY_DEMO_INCIDENT_NUMBER=${pd_incident_number}"
-        } >> "$ROOT_DIR/.runbook/demo/yc-demo.env"
+          echo "PAGERDUTY_SIM_INCIDENT_ID=${pd_incident_id}"
+          echo "PAGERDUTY_SIM_INCIDENT_NUMBER=${pd_incident_number}"
+        } >> "$ROOT_DIR/.runbook/simulate/incidents.env"
         log "PagerDuty incident resolved: ${pd_incident_id} (number: ${pd_incident_number})"
       else
         warn 'Could not resolve incident ID from PagerDuty API response. You can still use the triggered alert in PagerDuty UI.'
       fi
     else
       warn 'PAGERDUTY_API_KEY not set, so incident ID auto-discovery is skipped.'
-      warn 'Set PAGERDUTY_API_KEY and rerun --create-pd-incident to auto-store incident ID in .runbook/demo/yc-demo.env.'
+      warn 'Set PAGERDUTY_API_KEY and rerun --create-pd-incident to auto-store incident ID in .runbook/simulate/incidents.env.'
     fi
 
     return
@@ -563,28 +563,28 @@ JSON
   pd_incident_number="$(printf '%s' "$response" | node -e 'let data="";process.stdin.on("data",(c)=>data+=c);process.stdin.on("end",()=>{const json=JSON.parse(data);process.stdout.write(String(json.incident && json.incident.incident_number ? json.incident.incident_number : ""));});')"
 
   {
-    echo "PAGERDUTY_DEMO_INCIDENT_ID=${pd_incident_id}"
-    echo "PAGERDUTY_DEMO_INCIDENT_NUMBER=${pd_incident_number}"
-  } >> "$ROOT_DIR/.runbook/demo/yc-demo.env"
+    echo "PAGERDUTY_SIM_INCIDENT_ID=${pd_incident_id}"
+    echo "PAGERDUTY_SIM_INCIDENT_NUMBER=${pd_incident_number}"
+  } >> "$ROOT_DIR/.runbook/simulate/incidents.env"
 
   log "PagerDuty incident created: ${pd_incident_id} (number: ${pd_incident_number})"
 }
 
 print_next_steps() {
-  local demo_incident_id="DEMO-checkout-command-not-found"
-  if [[ -f "$ROOT_DIR/.runbook/demo/yc-demo.env" ]]; then
+  local simulation_incident_id="SIM-checkout-command-not-found"
+  if [[ -f "$ROOT_DIR/.runbook/simulate/incidents.env" ]]; then
     local pd_id
-    pd_id="$(grep '^PAGERDUTY_DEMO_INCIDENT_ID=' "$ROOT_DIR/.runbook/demo/yc-demo.env" | tail -n 1 | cut -d '=' -f 2- || true)"
+    pd_id="$(grep '^PAGERDUTY_SIM_INCIDENT_ID=' "$ROOT_DIR/.runbook/simulate/incidents.env" | tail -n 1 | cut -d '=' -f 2- || true)"
     if [[ -n "$pd_id" ]]; then
-      demo_incident_id="$pd_id"
+      simulation_incident_id="$pd_id"
     fi
   fi
 
   cat <<STEPS
 
-Demo assets are ready.
+Simulation assets are ready.
 
-Chat demo commands:
+Chat simulation commands:
   npm run dev -- knowledge search "checkout command not found exit code 127"
   npm run dev -- ask "What does the runbook say for checkout-api command not found incidents?"
   npm run dev -- chat
@@ -593,22 +593,22 @@ Suggested prompts inside chat:
   - "Summarize the runbook for checkout-api exit code 127 and give me a 5-minute triage plan."
   - "What rollback and validation steps should I run for a command-not-found deploy failure?"
 
-Investigate demo command:
-  npm run dev -- investigate ${demo_incident_id} --verbose
+Investigate simulation command:
+  npm run dev -- investigate ${simulation_incident_id} --verbose
 
-If you provisioned AWS demo infra, useful context to mention on-screen:
+If you provisioned AWS simulation infra, useful context to mention on-screen:
   - Alarm name: ${PREFIX}-lambda-errors
   - Function: ${PREFIX}-failing-worker
 
 Cleanup command when done:
-  scripts/demo/cleanup-yc-demo.sh --region ${REGION} --prefix ${PREFIX}
+  scripts/simulate/cleanup-incidents.sh --region ${REGION} --prefix ${PREFIX}
 STEPS
 }
 
 main() {
   parse_args "$@"
 
-  setup_demo_knowledge
+  setup_simulation_knowledge
   run_knowledge_sync
 
   if [[ "$WITH_AWS" -eq 1 ]]; then

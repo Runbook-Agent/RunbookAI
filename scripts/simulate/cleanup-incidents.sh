@@ -5,36 +5,36 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 REGION="${AWS_REGION:-us-east-1}"
-PREFIX="${RUNBOOK_DEMO_PREFIX:-runbook-yc-demo}"
+PREFIX="${RUNBOOK_SIM_PREFIX:-runbook-sim-incidents}"
 
 usage() {
   cat <<USAGE
-Usage: scripts/demo/cleanup-yc-demo.sh [options]
+Usage: scripts/simulate/cleanup-incidents.sh [options]
 
-Deletes AWS resources created by scripts/demo/setup-yc-demo.sh --with-aws.
+Deletes AWS resources created by scripts/simulate/setup-incidents.sh --with-aws.
 
 Options:
   --region <region>   AWS region (default: AWS_REGION or us-east-1)
-  --prefix <prefix>   Resource prefix (default: runbook-yc-demo)
+  --prefix <prefix>   Resource prefix (default: runbook-sim-incidents)
   -h, --help          Show this help
 USAGE
 }
 
 log() {
-  printf '[demo-cleanup] %s\n' "$*"
+  printf '[simulate-cleanup] %s\n' "$*"
 }
 
 warn() {
-  printf '[demo-cleanup] WARN: %s\n' "$*" >&2
+  printf '[simulate-cleanup] WARN: %s\n' "$*" >&2
 }
 
 load_env_file() {
-  local env_file="$ROOT_DIR/.runbook/demo/yc-demo.env"
+  local env_file="$ROOT_DIR/.runbook/simulate/incidents.env"
   if [[ -f "$env_file" ]]; then
     # shellcheck disable=SC1090
     source "$env_file"
     REGION="${AWS_REGION:-$REGION}"
-    PREFIX="${RUNBOOK_DEMO_PREFIX:-$PREFIX}"
+    PREFIX="${RUNBOOK_SIM_PREFIX:-$PREFIX}"
   fi
 }
 
@@ -149,8 +149,8 @@ main() {
     warn "IAM role not found: $role_name"
   fi
 
-  if [[ -f "$ROOT_DIR/.runbook/demo/yc-demo.env" ]]; then
-    rm -f "$ROOT_DIR/.runbook/demo/yc-demo.env"
+  if [[ -f "$ROOT_DIR/.runbook/simulate/incidents.env" ]]; then
+    rm -f "$ROOT_DIR/.runbook/simulate/incidents.env"
   fi
 
   log 'Cleanup complete'

@@ -1,24 +1,24 @@
-# YC Demo Setup (Chat + Investigate)
+# Incident Simulation Setup (Chat + Investigate)
 
 This guide gives you a deterministic setup for recording two flows:
 
 1. Chat/ask using ingested runbooks.
 2. `runbook investigate` on a controlled failing-command incident.
 
-## 1) Create Demo Assets
+## 1) Create Simulation Assets
 
 ```bash
-scripts/demo/setup-yc-demo.sh
+npm run simulate:setup
 ```
 
 What this does:
-- Creates realistic knowledge docs under `.runbook/runbooks/yc-demo/`.
+- Creates realistic knowledge docs under `.runbook/runbooks/simulate-incidents/`.
 - Runs `npm run dev -- knowledge sync` to ingest them.
 
 ## 2) Optional: Provision AWS Failing Infra
 
 ```bash
-scripts/demo/setup-yc-demo.sh --with-aws
+npm run simulate:setup -- --with-aws
 ```
 
 What this adds:
@@ -28,15 +28,15 @@ What this adds:
 
 ## 3) Optional: Create PagerDuty Incident
 
-If you want a real incident ID for the demo:
+If you want a real incident ID for the simulation:
 
 ```bash
 export PAGERDUTY_EVENTS_ROUTING_KEY=...
 export PAGERDUTY_API_KEY=... # optional but recommended so script can auto-store incident ID
-scripts/demo/setup-yc-demo.sh --with-aws --create-pd-incident
+npm run simulate:setup -- --with-aws --create-pd-incident
 ```
 
-The script triggers via PagerDuty Events API and, when `PAGERDUTY_API_KEY` is set, writes the incident ID to `.runbook/demo/yc-demo.env`.
+The script triggers via PagerDuty Events API and, when `PAGERDUTY_API_KEY` is set, writes the incident ID to `.runbook/simulate/incidents.env`.
 
 If you want `pagerduty_*` tools available at runtime, ensure `.runbook/config.yaml` includes:
 
@@ -61,11 +61,11 @@ Suggested live prompts in chat:
 - "Summarize the runbook for checkout-api exit code 127 and give me a 5-minute triage plan."
 - "What rollback and validation steps should I run for a command-not-found deploy failure?"
 
-### B) Investigate demo
+### B) Investigate simulation
 
 Use either:
-- PagerDuty incident ID from `.runbook/demo/yc-demo.env`, or
-- Synthetic ID: `DEMO-checkout-command-not-found`
+- PagerDuty incident ID from `.runbook/simulate/incidents.env`, or
+- Synthetic ID: `SIM-checkout-command-not-found`
 
 ```bash
 npm run dev -- investigate <incident-id> --verbose
@@ -74,11 +74,11 @@ npm run dev -- investigate <incident-id> --verbose
 ## Cleanup
 
 ```bash
-scripts/demo/cleanup-yc-demo.sh
+npm run simulate:cleanup
 ```
 
 Or explicit values:
 
 ```bash
-scripts/demo/cleanup-yc-demo.sh --region us-east-1 --prefix runbook-yc-demo
+npm run simulate:cleanup -- --region us-east-1 --prefix runbook-sim-incidents
 ```
