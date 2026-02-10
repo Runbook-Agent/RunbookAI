@@ -201,6 +201,23 @@ knowledge:
 
 See [PLAN.md](./PLAN.md) for full configuration options.
 
+## Incident Simulation
+
+Use the built-in simulation utilities to stage deterministic chat + investigate demos:
+
+```bash
+# Create simulation runbooks and sync knowledge
+npm run simulate:setup
+
+# Optional: provision failing AWS resources + trigger PagerDuty incident
+npm run simulate:setup -- --with-aws --create-pd-incident
+
+# Cleanup simulation infra/resources
+npm run simulate:cleanup
+```
+
+Detailed guide: [docs/SIMULATE_INCIDENTS.md](./docs/SIMULATE_INCIDENTS.md)
+
 ## Investigation Evaluation
 
 Run real-loop investigation benchmarks against fixture datasets:
@@ -245,6 +262,10 @@ See [docs/INVESTIGATION_EVAL.md](./docs/INVESTIGATION_EVAL.md) for dataset setup
   - Google Drive: OAuth2 flow, Google Docs/Sheets export, incremental sync
   - New command: `runbook knowledge auth google` for OAuth setup
 - Investigation eval harness now supports RCAEval, Rootly logs, and TraceRCA conversion with a unified multi-benchmark runner (`npm run eval:all`) and per-benchmark JSON reports.
+- Incident simulation docs/scripts were renamed from YC-specific naming to generic utilities:
+  - `docs/SIMULATE_INCIDENTS.md`
+  - `npm run simulate:setup`
+  - `npm run simulate:cleanup`
 - Skill execution now runs real workflows via `SkillExecutor` through the `skill` tool.
 - CLI runtime now loads dynamic skills from registry and injects knowledge retrieval into agent runtime.
 - Main config schema now includes OpsGenie under `incident.opsgenie` with validation.
