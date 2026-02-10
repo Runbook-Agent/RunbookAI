@@ -21,6 +21,8 @@
     "eval:convert:rootly": "tsx src/eval/rootly-logs-to-fixtures.ts",
     "eval:convert:tracerca": "tsx src/eval/tracerca-to-fixtures.ts",
     "eval:all": "tsx src/eval/run-all-benchmarks.ts",
+    "simulate:setup": "bash scripts/simulate/setup-incidents.sh",
+    "simulate:cleanup": "bash scripts/simulate/cleanup-incidents.sh",
     "prepare": "husky"
   },
   "dependencies": {

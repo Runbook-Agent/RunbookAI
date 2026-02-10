@@ -278,3 +278,33 @@ Behavioral guarantees:
 
 ### Impact
 - Benchmark execution is closer to one-command operation with no manual dataset prep in common flows.
+
+---
+
+## Session Summary (2026-02-10)
+Incident demo assets were renamed from YC-specific naming to generic incident simulation utilities.
+
+### What changed
+- Renamed docs guide:
+  - `docs/YC_DEMO.md` -> `docs/SIMULATE_INCIDENTS.md`
+- Renamed simulation scripts:
+  - `scripts/demo/setup-yc-demo.sh` -> `scripts/simulate/setup-incidents.sh`
+  - `scripts/demo/cleanup-yc-demo.sh` -> `scripts/simulate/cleanup-incidents.sh`
+- Renamed npm scripts:
+  - `demo:setup` -> `simulate:setup`
+  - `demo:cleanup` -> `simulate:cleanup`
+- Standardized simulation env file and keys:
+  - `.runbook/simulate/incidents.env`
+  - `RUNBOOK_SIM_*` and `PAGERDUTY_SIM_*`
+- Updated synthetic incident ID used in guidance:
+  - `SIM-checkout-command-not-found`
+
+### Files
+- `docs/SIMULATE_INCIDENTS.md`
+- `scripts/simulate/setup-incidents.sh`
+- `scripts/simulate/cleanup-incidents.sh`
+- `package.json`
+
+### Impact
+- Failure simulation tooling is now generic and reusable beyond YC demo recording.
+- Naming across docs/scripts/env output is consistent and easier to discover.
