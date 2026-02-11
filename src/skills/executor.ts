@@ -22,7 +22,11 @@ import type { LLMClient } from '../model/llm';
 export interface SkillExecutorOptions {
   llm: LLMClient;
   onStepStart?: (step: SkillStep, context: SkillExecutionContext) => void;
-  onStepComplete?: (step: SkillStep, result: SkillStepResult, context: SkillExecutionContext) => void;
+  onStepComplete?: (
+    step: SkillStep,
+    result: SkillStepResult,
+    context: SkillExecutionContext
+  ) => void;
   onApprovalRequired?: (step: SkillStep, context: SkillExecutionContext) => Promise<boolean>;
   onProgress?: (message: string, context: SkillExecutionContext) => void;
 }
@@ -114,7 +118,10 @@ export class SkillExecutor {
             let retries = 0;
             while (retries < step.maxRetries && stepResult.status === 'failed') {
               retries++;
-              this.options.onProgress?.(`Retrying step ${step.id} (${retries}/${step.maxRetries})`, context);
+              this.options.onProgress?.(
+                `Retrying step ${step.id} (${retries}/${step.maxRetries})`,
+                context
+              );
               const retryResult = await this.executeStep(step, context);
               if (retryResult.status === 'success') {
                 stepResults[stepResults.length - 1] = retryResult;
@@ -147,7 +154,12 @@ export class SkillExecutor {
     const completedAt = new Date();
     return {
       skillId: skill.id,
-      status: context.status === 'cancelled' ? 'cancelled' : context.status === 'failed' ? 'failed' : 'completed',
+      status:
+        context.status === 'cancelled'
+          ? 'cancelled'
+          : context.status === 'failed'
+            ? 'failed'
+            : 'completed',
       parameters,
       stepResults,
       startedAt,
@@ -159,7 +171,10 @@ export class SkillExecutor {
   /**
    * Execute a single step
    */
-  private async executeStep(step: SkillStep, context: SkillExecutionContext): Promise<SkillStepResult> {
+  private async executeStep(
+    step: SkillStep,
+    context: SkillExecutionContext
+  ): Promise<SkillStepResult> {
     const startedAt = new Date();
 
     try {

@@ -47,7 +47,7 @@ async function promFetch<T>(path: string): Promise<T> {
     throw new Error(`Prometheus API error: ${response.status} ${error}`);
   }
 
-  const data = await response.json() as {
+  const data = (await response.json()) as {
     status: 'success' | 'error';
     data?: T;
     error?: string;
@@ -113,10 +113,7 @@ export interface PrometheusTargetsResult {
 /**
  * Query Prometheus for instant data (single point in time)
  */
-export async function instantQuery(
-  query: string,
-  time?: Date
-): Promise<PrometheusInstantResult> {
+export async function instantQuery(query: string, time?: Date): Promise<PrometheusInstantResult> {
   const params = new URLSearchParams({ query });
   if (time) {
     params.set('time', (time.getTime() / 1000).toString());
@@ -154,16 +151,18 @@ export async function getAlerts(): Promise<PrometheusAlertGroup[]> {
 /**
  * Get firing alerts only
  */
-export async function getFiringAlerts(): Promise<Array<{
-  alertname: string;
-  instance?: string;
-  job?: string;
-  severity?: string;
-  summary?: string;
-  description?: string;
-  state: 'firing' | 'pending';
-  activeAt: string;
-}>> {
+export async function getFiringAlerts(): Promise<
+  Array<{
+    alertname: string;
+    instance?: string;
+    job?: string;
+    severity?: string;
+    summary?: string;
+    description?: string;
+    state: 'firing' | 'pending';
+    activeAt: string;
+  }>
+> {
   const groups = await getAlerts();
   const firingAlerts: Array<{
     alertname: string;
@@ -280,7 +279,8 @@ export const COMMON_QUERIES = {
   memoryUsageByNode: '100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)',
 
   // Disk
-  diskUsage: '(1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100',
+  diskUsage:
+    '(1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100',
   diskIO: 'rate(node_disk_io_time_seconds_total[5m]) * 100',
 
   // Network
@@ -289,10 +289,14 @@ export const COMMON_QUERIES = {
 
   // HTTP (if instrumented)
   requestRate: 'sum(rate(http_requests_total[5m])) by (service)',
-  errorRate: 'sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100',
-  latencyP99: 'histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))',
-  latencyP95: 'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))',
-  latencyP50: 'histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))',
+  errorRate:
+    'sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100',
+  latencyP99:
+    'histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))',
+  latencyP95:
+    'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))',
+  latencyP50:
+    'histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))',
 
   // Container
   containerCpu: 'sum(rate(container_cpu_usage_seconds_total{name!=""}[5m])) by (name) * 100',

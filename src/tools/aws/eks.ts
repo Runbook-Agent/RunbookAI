@@ -261,7 +261,10 @@ export async function describeFargateProfile(
   const client = await getClient(EKSClient, { accountName, region });
 
   try {
-    const command = new DescribeFargateProfileCommand({ clusterName, fargateProfileName: profileName });
+    const command = new DescribeFargateProfileCommand({
+      clusterName,
+      fargateProfileName: profileName,
+    });
     const response = await client.send(command);
     const fp = response.fargateProfile;
 

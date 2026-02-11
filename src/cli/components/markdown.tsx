@@ -238,13 +238,7 @@ function BlockRenderer({ block }: { block: ParsedBlock }): React.ReactElement | 
 /**
  * Render a header with appropriate styling
  */
-function HeaderBlock({
-  level,
-  content,
-}: {
-  level: number;
-  content: string;
-}): React.ReactElement {
+function HeaderBlock({ level, content }: { level: number; content: string }): React.ReactElement {
   const colors: Record<number, string> = {
     1: 'cyan',
     2: 'cyan',
@@ -313,9 +307,7 @@ function ListBlock({
           <Box key={index}>
             <Text>
               {indentSpaces}
-              <Text color="yellow">{bulletChar}</Text>
-              {' '}
-              {renderInlineFormatting(item.text)}
+              <Text color="yellow">{bulletChar}</Text> {renderInlineFormatting(item.text)}
             </Text>
           </Box>
         );
@@ -350,8 +342,8 @@ function renderInlineFormatting(text: string): React.ReactNode[] {
     }
 
     // Check for bold (** or __)
-    const boldMatch = remaining.match(/^(.*?)\*\*([^*]+)\*\*(.*)$/s) ||
-                      remaining.match(/^(.*?)__([^_]+)__(.*)$/s);
+    const boldMatch =
+      remaining.match(/^(.*?)\*\*([^*]+)\*\*(.*)$/s) || remaining.match(/^(.*?)__([^_]+)__(.*)$/s);
     if (boldMatch) {
       const [, before, bold, after] = boldMatch;
       if (before) result.push(...renderInlineFormatting(before));
@@ -365,8 +357,9 @@ function renderInlineFormatting(text: string): React.ReactNode[] {
     }
 
     // Check for italics (* or _) - must not be followed by another */_
-    const italicMatch = remaining.match(/^(.*?)(?<!\*)\*([^*]+)\*(?!\*)(.*)$/s) ||
-                        remaining.match(/^(.*?)(?<!_)_([^_]+)_(?!_)(.*)$/s);
+    const italicMatch =
+      remaining.match(/^(.*?)(?<!\*)\*([^*]+)\*(?!\*)(.*)$/s) ||
+      remaining.match(/^(.*?)(?<!_)_([^_]+)_(?!_)(.*)$/s);
     if (italicMatch) {
       const [, before, italic, after] = italicMatch;
       if (before) result.push(...renderInlineFormatting(before));
@@ -404,7 +397,8 @@ function renderInlineFormatting(text: string): React.ReactNode[] {
             {linkText}
           </Text>
           <Text color="gray" dimColor>
-            {' '}[{url}]
+            {' '}
+            [{url}]
           </Text>
         </Text>
       );

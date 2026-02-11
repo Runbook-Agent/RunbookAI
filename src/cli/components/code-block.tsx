@@ -78,7 +78,8 @@ export function CodeBlock({ code, language }: CodeBlockProps): React.ReactElemen
         <Box key={index}>
           <Text color="gray">{'│'}</Text>
           <Text color="gray" dimColor>
-            {' '}{String(index + 1).padStart(lineNumberWidth, ' ')} {'│'}
+            {' '}
+            {String(index + 1).padStart(lineNumberWidth, ' ')} {'│'}
           </Text>
           <Text> {line}</Text>
         </Box>

@@ -175,7 +175,11 @@ function inferType(filePath: string, content: string): KnowledgeType {
   if (lowerPath.includes('runbook') || lowerContent.includes('## mitigation')) {
     return 'runbook';
   }
-  if (lowerPath.includes('postmortem') || lowerPath.includes('post-mortem') || lowerContent.includes('root cause')) {
+  if (
+    lowerPath.includes('postmortem') ||
+    lowerPath.includes('post-mortem') ||
+    lowerContent.includes('root cause')
+  ) {
     return 'postmortem';
   }
   if (lowerPath.includes('architecture') || lowerContent.includes('## components')) {

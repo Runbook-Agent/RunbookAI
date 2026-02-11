@@ -79,13 +79,21 @@ describe('ServiceGraph', () => {
       expect(updated?.team).toBe('infra');
       expect(updated?.tier).toBe('high');
       // Updated time should be >= created time
-      expect(updated?.updatedAt.getTime()).toBeGreaterThanOrEqual(updated?.createdAt.getTime() || 0);
+      expect(updated?.updatedAt.getTime()).toBeGreaterThanOrEqual(
+        updated?.createdAt.getTime() || 0
+      );
     });
 
     it('should remove service and its edges', () => {
       graph.addService({ id: 'a', name: 'A', type: 'service', tags: [], metadata: {} });
       graph.addService({ id: 'b', name: 'B', type: 'service', tags: [], metadata: {} });
-      graph.addDependency({ source: 'a', target: 'b', type: 'sync', criticality: 'critical', metadata: {} });
+      graph.addDependency({
+        source: 'a',
+        target: 'b',
+        type: 'sync',
+        criticality: 'critical',
+        metadata: {},
+      });
 
       const removed = graph.removeService('b');
 
@@ -156,8 +164,20 @@ describe('ServiceGraph', () => {
     });
 
     it('should get dependencies (outgoing)', () => {
-      graph.addDependency({ source: 'api', target: 'db', type: 'database', criticality: 'critical', metadata: {} });
-      graph.addDependency({ source: 'api', target: 'cache', type: 'cache', criticality: 'degraded', metadata: {} });
+      graph.addDependency({
+        source: 'api',
+        target: 'db',
+        type: 'database',
+        criticality: 'critical',
+        metadata: {},
+      });
+      graph.addDependency({
+        source: 'api',
+        target: 'cache',
+        type: 'cache',
+        criticality: 'degraded',
+        metadata: {},
+      });
 
       const deps = graph.getDependencies('api');
 
@@ -167,7 +187,13 @@ describe('ServiceGraph', () => {
     });
 
     it('should get dependents (incoming)', () => {
-      graph.addDependency({ source: 'api', target: 'db', type: 'database', criticality: 'critical', metadata: {} });
+      graph.addDependency({
+        source: 'api',
+        target: 'db',
+        type: 'database',
+        criticality: 'critical',
+        metadata: {},
+      });
 
       const dependents = graph.getDependents('db');
 
@@ -176,7 +202,13 @@ describe('ServiceGraph', () => {
     });
 
     it('should get service with dependencies', () => {
-      graph.addDependency({ source: 'api', target: 'db', type: 'database', criticality: 'critical', metadata: {} });
+      graph.addDependency({
+        source: 'api',
+        target: 'db',
+        type: 'database',
+        criticality: 'critical',
+        metadata: {},
+      });
 
       const result = graph.getServiceWithDependencies('api');
 
@@ -189,9 +221,33 @@ describe('ServiceGraph', () => {
 
   describe('filtering', () => {
     beforeEach(() => {
-      graph.addService({ id: 's1', name: 'Service 1', type: 'service', team: 'platform', tier: 'critical', tags: ['api', 'rest'], metadata: {} });
-      graph.addService({ id: 's2', name: 'Service 2', type: 'service', team: 'platform', tier: 'high', tags: ['internal'], metadata: {} });
-      graph.addService({ id: 'db1', name: 'Database', type: 'database', team: 'infra', tier: 'critical', tags: ['postgres'], metadata: {} });
+      graph.addService({
+        id: 's1',
+        name: 'Service 1',
+        type: 'service',
+        team: 'platform',
+        tier: 'critical',
+        tags: ['api', 'rest'],
+        metadata: {},
+      });
+      graph.addService({
+        id: 's2',
+        name: 'Service 2',
+        type: 'service',
+        team: 'platform',
+        tier: 'high',
+        tags: ['internal'],
+        metadata: {},
+      });
+      graph.addService({
+        id: 'db1',
+        name: 'Database',
+        type: 'database',
+        team: 'infra',
+        tier: 'critical',
+        tags: ['postgres'],
+        metadata: {},
+      });
     });
 
     it('should filter by team', () => {
@@ -230,14 +286,38 @@ describe('ServiceGraph', () => {
   describe('impact analysis', () => {
     beforeEach(() => {
       // Create a chain: frontend -> api -> db
-      graph.addService({ id: 'frontend', name: 'Frontend', type: 'service', tags: [], metadata: {} });
+      graph.addService({
+        id: 'frontend',
+        name: 'Frontend',
+        type: 'service',
+        tags: [],
+        metadata: {},
+      });
       graph.addService({ id: 'api', name: 'API', type: 'service', tags: [], metadata: {} });
       graph.addService({ id: 'db', name: 'Database', type: 'database', tags: [], metadata: {} });
       graph.addService({ id: 'cache', name: 'Cache', type: 'cache', tags: [], metadata: {} });
 
-      graph.addDependency({ source: 'frontend', target: 'api', type: 'sync', criticality: 'critical', metadata: {} });
-      graph.addDependency({ source: 'api', target: 'db', type: 'database', criticality: 'critical', metadata: {} });
-      graph.addDependency({ source: 'api', target: 'cache', type: 'cache', criticality: 'degraded', metadata: {} });
+      graph.addDependency({
+        source: 'frontend',
+        target: 'api',
+        type: 'sync',
+        criticality: 'critical',
+        metadata: {},
+      });
+      graph.addDependency({
+        source: 'api',
+        target: 'db',
+        type: 'database',
+        criticality: 'critical',
+        metadata: {},
+      });
+      graph.addDependency({
+        source: 'api',
+        target: 'cache',
+        type: 'cache',
+        criticality: 'degraded',
+        metadata: {},
+      });
     });
 
     it('should get upstream impact', () => {
@@ -286,10 +366,34 @@ describe('ServiceGraph', () => {
       graph.addService({ id: 'c', name: 'C', type: 'service', tags: [], metadata: {} });
       graph.addService({ id: 'd', name: 'D', type: 'service', tags: [], metadata: {} });
 
-      graph.addDependency({ source: 'a', target: 'b', type: 'sync', criticality: 'critical', metadata: {} });
-      graph.addDependency({ source: 'b', target: 'c', type: 'sync', criticality: 'critical', metadata: {} });
-      graph.addDependency({ source: 'a', target: 'd', type: 'sync', criticality: 'critical', metadata: {} });
-      graph.addDependency({ source: 'd', target: 'c', type: 'sync', criticality: 'critical', metadata: {} });
+      graph.addDependency({
+        source: 'a',
+        target: 'b',
+        type: 'sync',
+        criticality: 'critical',
+        metadata: {},
+      });
+      graph.addDependency({
+        source: 'b',
+        target: 'c',
+        type: 'sync',
+        criticality: 'critical',
+        metadata: {},
+      });
+      graph.addDependency({
+        source: 'a',
+        target: 'd',
+        type: 'sync',
+        criticality: 'critical',
+        metadata: {},
+      });
+      graph.addDependency({
+        source: 'd',
+        target: 'c',
+        type: 'sync',
+        criticality: 'critical',
+        metadata: {},
+      });
     });
 
     it('should find shortest path', () => {
@@ -323,9 +427,27 @@ describe('ServiceGraph', () => {
       graph.addService({ id: 'b', name: 'B', type: 'service', tags: [], metadata: {} });
       graph.addService({ id: 'c', name: 'C', type: 'service', tags: [], metadata: {} });
 
-      graph.addDependency({ source: 'a', target: 'b', type: 'sync', criticality: 'critical', metadata: {} });
-      graph.addDependency({ source: 'b', target: 'c', type: 'sync', criticality: 'critical', metadata: {} });
-      graph.addDependency({ source: 'c', target: 'a', type: 'sync', criticality: 'critical', metadata: {} });
+      graph.addDependency({
+        source: 'a',
+        target: 'b',
+        type: 'sync',
+        criticality: 'critical',
+        metadata: {},
+      });
+      graph.addDependency({
+        source: 'b',
+        target: 'c',
+        type: 'sync',
+        criticality: 'critical',
+        metadata: {},
+      });
+      graph.addDependency({
+        source: 'c',
+        target: 'a',
+        type: 'sync',
+        criticality: 'critical',
+        metadata: {},
+      });
 
       const cycles = graph.detectCycles();
 
@@ -336,7 +458,13 @@ describe('ServiceGraph', () => {
       graph.addService({ id: 'a', name: 'A', type: 'service', tags: [], metadata: {} });
       graph.addService({ id: 'b', name: 'B', type: 'service', tags: [], metadata: {} });
 
-      graph.addDependency({ source: 'a', target: 'b', type: 'sync', criticality: 'critical', metadata: {} });
+      graph.addDependency({
+        source: 'a',
+        target: 'b',
+        type: 'sync',
+        criticality: 'critical',
+        metadata: {},
+      });
 
       const cycles = graph.detectCycles();
 
@@ -346,12 +474,47 @@ describe('ServiceGraph', () => {
 
   describe('statistics', () => {
     it('should get graph statistics', () => {
-      graph.addService({ id: 's1', name: 'S1', type: 'service', team: 'platform', tier: 'critical', tags: [], metadata: {} });
-      graph.addService({ id: 's2', name: 'S2', type: 'service', team: 'platform', tags: [], metadata: {} });
-      graph.addService({ id: 'db', name: 'DB', type: 'database', team: 'infra', tier: 'critical', tags: [], metadata: {} });
+      graph.addService({
+        id: 's1',
+        name: 'S1',
+        type: 'service',
+        team: 'platform',
+        tier: 'critical',
+        tags: [],
+        metadata: {},
+      });
+      graph.addService({
+        id: 's2',
+        name: 'S2',
+        type: 'service',
+        team: 'platform',
+        tags: [],
+        metadata: {},
+      });
+      graph.addService({
+        id: 'db',
+        name: 'DB',
+        type: 'database',
+        team: 'infra',
+        tier: 'critical',
+        tags: [],
+        metadata: {},
+      });
 
-      graph.addDependency({ source: 's1', target: 'db', type: 'database', criticality: 'critical', metadata: {} });
-      graph.addDependency({ source: 's2', target: 'db', type: 'database', criticality: 'critical', metadata: {} });
+      graph.addDependency({
+        source: 's1',
+        target: 'db',
+        type: 'database',
+        criticality: 'critical',
+        metadata: {},
+      });
+      graph.addDependency({
+        source: 's2',
+        target: 'db',
+        type: 'database',
+        criticality: 'critical',
+        metadata: {},
+      });
 
       const stats = graph.getStats();
 
@@ -367,9 +530,21 @@ describe('ServiceGraph', () => {
 
   describe('serialization', () => {
     it('should serialize to JSON', () => {
-      graph.addService({ id: 'api', name: 'API', type: 'service', tags: ['rest'], metadata: { version: '1.0' } });
+      graph.addService({
+        id: 'api',
+        name: 'API',
+        type: 'service',
+        tags: ['rest'],
+        metadata: { version: '1.0' },
+      });
       graph.addService({ id: 'db', name: 'DB', type: 'database', tags: [], metadata: {} });
-      graph.addDependency({ source: 'api', target: 'db', type: 'database', criticality: 'critical', metadata: {} });
+      graph.addDependency({
+        source: 'api',
+        target: 'db',
+        type: 'database',
+        criticality: 'critical',
+        metadata: {},
+      });
 
       const json = graph.toJSON();
       const parsed = JSON.parse(json);
@@ -381,7 +556,13 @@ describe('ServiceGraph', () => {
     it('should deserialize from JSON', () => {
       graph.addService({ id: 'api', name: 'API', type: 'service', tags: [], metadata: {} });
       graph.addService({ id: 'db', name: 'DB', type: 'database', tags: [], metadata: {} });
-      graph.addDependency({ source: 'api', target: 'db', type: 'database', criticality: 'critical', metadata: {} });
+      graph.addDependency({
+        source: 'api',
+        target: 'db',
+        type: 'database',
+        criticality: 'critical',
+        metadata: {},
+      });
 
       const json = graph.toJSON();
       const restored = ServiceGraph.fromJSON(json);
@@ -396,7 +577,13 @@ describe('ServiceGraph', () => {
     it('should clear all data', () => {
       graph.addService({ id: 'api', name: 'API', type: 'service', tags: [], metadata: {} });
       graph.addService({ id: 'db', name: 'DB', type: 'database', tags: [], metadata: {} });
-      graph.addDependency({ source: 'api', target: 'db', type: 'database', criticality: 'critical', metadata: {} });
+      graph.addDependency({
+        source: 'api',
+        target: 'db',
+        type: 'database',
+        criticality: 'critical',
+        metadata: {},
+      });
 
       graph.clear();
 

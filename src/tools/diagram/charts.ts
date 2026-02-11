@@ -32,16 +32,13 @@ export function generateLineChart(
   data: number[] | TimeSeriesPoint[],
   options: ChartOptions = {}
 ): string {
-  const {
-    width = 60,
-    height = 12,
-    title,
-  } = options;
+  const { width = 60, height = 12, title } = options;
 
   // Extract values from time series if needed
-  const values = Array.isArray(data) && typeof data[0] === 'number'
-    ? (data as number[])
-    : (data as TimeSeriesPoint[]).map((p) => p.value);
+  const values =
+    Array.isArray(data) && typeof data[0] === 'number'
+      ? (data as number[])
+      : (data as TimeSeriesPoint[]).map((p) => p.value);
 
   if (values.length === 0) {
     return '[No data points to display]';
@@ -79,14 +76,8 @@ export function generateLineChart(
 /**
  * Generate an ASCII bar chart
  */
-export function generateBarChart(
-  data: BarChartData[],
-  options: ChartOptions = {}
-): string {
-  const {
-    width = 50,
-    title,
-  } = options;
+export function generateBarChart(data: BarChartData[], options: ChartOptions = {}): string {
+  const { width = 50, title } = options;
 
   if (data.length === 0) {
     return '[No data points to display]';
@@ -125,10 +116,7 @@ export function generateBarChart(
 /**
  * Generate a horizontal bar chart with percentage
  */
-export function generatePercentageBar(
-  data: BarChartData[],
-  options: ChartOptions = {}
-): string {
+export function generatePercentageBar(data: BarChartData[], options: ChartOptions = {}): string {
   const { width = 50, title } = options;
 
   if (data.length === 0) {
@@ -162,13 +150,16 @@ export function generatePercentageBar(
 /**
  * Generate a sparkline (mini inline chart)
  */
-export function generateSparkline(data: number[], options: { showValues?: boolean; showRange?: boolean } = {}): string {
+export function generateSparkline(
+  data: number[],
+  options: { showValues?: boolean; showRange?: boolean } = {}
+): string {
   if (!data || data.length === 0) return '[no data]';
 
   // Filter and convert to valid numbers
   const validData = data
-    .map(v => typeof v === 'string' ? parseFloat(v) : Number(v))
-    .filter(v => !isNaN(v) && isFinite(v));
+    .map((v) => (typeof v === 'string' ? parseFloat(v) : Number(v)))
+    .filter((v) => !isNaN(v) && isFinite(v));
 
   if (validData.length === 0) return '[no valid data points]';
 

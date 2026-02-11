@@ -27,14 +27,17 @@ export interface QueryPlan {
 /**
  * Common failure patterns and their investigation queries
  */
-const FAILURE_PATTERNS: Record<string, {
-  keywords: string[];
-  queries: Array<{
-    tool: string;
-    parameters: Record<string, unknown>;
-    description: string;
-  }>;
-}> = {
+const FAILURE_PATTERNS: Record<
+  string,
+  {
+    keywords: string[];
+    queries: Array<{
+      tool: string;
+      parameters: Record<string, unknown>;
+      description: string;
+    }>;
+  }
+> = {
   high_latency: {
     keywords: ['latency', 'slow', 'timeout', 'delay', 'response time', 'p99', 'p95'],
     queries: [
@@ -330,7 +333,11 @@ export function generateQueryPlan(hypotheses: Hypothesis[]): QueryPlan[] {
 export function isQueryTooBroad(query: CausalQuery): boolean {
   const broadPatterns = [
     // Queries without filters
-    { tool: 'aws_query', check: (p: Record<string, unknown>) => !p.services || (p.services as string[]).includes('all') },
+    {
+      tool: 'aws_query',
+      check: (p: Record<string, unknown>) =>
+        !p.services || (p.services as string[]).includes('all'),
+    },
     // Log queries without specific patterns
     { tool: 'cloudwatch_logs', check: (p: Record<string, unknown>) => !p.filter_pattern },
     // Datadog queries without filters
@@ -349,18 +356,24 @@ export function isQueryTooBroad(query: CausalQuery): boolean {
 /**
  * Suggest refinements for broad queries
  */
-export function suggestQueryRefinements(query: CausalQuery, context: {
-  service?: string;
-  timeRange?: number;
-  errorType?: string;
-}): CausalQuery {
+export function suggestQueryRefinements(
+  query: CausalQuery,
+  context: {
+    service?: string;
+    timeRange?: number;
+    errorType?: string;
+  }
+): CausalQuery {
   const refined = { ...query, parameters: { ...query.parameters } };
 
   if (query.tool === 'cloudwatch_logs' && !query.parameters.filter_pattern) {
     refined.parameters.filter_pattern = context.errorType || 'ERROR Exception';
   }
 
-  if (query.tool === 'aws_query' && (!query.parameters.services || (query.parameters.services as string[]).includes('all'))) {
+  if (
+    query.tool === 'aws_query' &&
+    (!query.parameters.services || (query.parameters.services as string[]).includes('all'))
+  ) {
     refined.parameters.services = ['ecs', 'lambda', 'rds']; // Default to common services
   }
 
@@ -381,10 +394,7 @@ export function suggestQueryRefinements(query: CausalQuery, context: {
 /**
  * Prioritize queries based on hypothesis confidence and query relevance
  */
-export function prioritizeQueries(
-  plans: QueryPlan[],
-  maxQueries: number = 10
-): CausalQuery[] {
+export function prioritizeQueries(plans: QueryPlan[], maxQueries: number = 10): CausalQuery[] {
   const allQueries: Array<CausalQuery & { priority: number }> = [];
 
   for (const plan of plans) {

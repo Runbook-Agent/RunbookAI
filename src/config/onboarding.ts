@@ -27,7 +27,9 @@ export interface OnboardingAnswers {
   accounts?: AWSAccount[];
 
   // Compute
-  computeServices: Array<'ecs' | 'ec2' | 'lambda' | 'eks' | 'fargate' | 'apprunner' | 'amplify' | 'none'>;
+  computeServices: Array<
+    'ecs' | 'ec2' | 'lambda' | 'eks' | 'fargate' | 'apprunner' | 'amplify' | 'none'
+  >;
 
   // Databases
   databaseServices: Array<'rds' | 'dynamodb' | 'elasticache' | 'documentdb' | 'aurora' | 'none'>;
@@ -129,11 +131,12 @@ export async function saveConfig(
   const mainConfigPath = join(configDir, 'config.yaml');
 
   // Use models supported by pi-ai
-  const llmModel = llmConfig?.provider === 'anthropic'
-    ? 'claude-sonnet-4-20250514'
-    : llmConfig?.provider === 'openai'
-      ? 'gpt-4o'
-      : 'llama3.1';
+  const llmModel =
+    llmConfig?.provider === 'anthropic'
+      ? 'claude-sonnet-4-20250514'
+      : llmConfig?.provider === 'openai'
+        ? 'gpt-4o'
+        : 'llama3.1';
 
   // Get regions from the service config
   const regions = config.aws.accounts?.[0]?.regions || ['us-east-1'];
@@ -149,14 +152,16 @@ export async function saveConfig(
 
   // Use camelCase to match the config schema
   const mainConfig: Record<string, unknown> = {
-    llm: llmConfig ? {
-      provider: llmConfig.provider,
-      model: llmModel,
-      apiKey: llmConfig.apiKey || undefined,
-    } : {
-      provider: 'openai',
-      model: 'gpt-4o',
-    },
+    llm: llmConfig
+      ? {
+          provider: llmConfig.provider,
+          model: llmModel,
+          apiKey: llmConfig.apiKey || undefined,
+        }
+      : {
+          provider: 'openai',
+          model: 'gpt-4o',
+        },
     providers: {
       aws: {
         enabled: true,
@@ -179,7 +184,8 @@ export async function saveConfig(
         enabled: slackGatewayEnabled,
         botToken: slackGatewayEnabled ? '${SLACK_BOT_TOKEN}' : undefined,
         appToken: slackGatewayEnabled && slackMode === 'socket' ? '${SLACK_APP_TOKEN}' : undefined,
-        signingSecret: slackGatewayEnabled && slackMode === 'http' ? '${SLACK_SIGNING_SECRET}' : undefined,
+        signingSecret:
+          slackGatewayEnabled && slackMode === 'http' ? '${SLACK_SIGNING_SECRET}' : undefined,
         events: {
           enabled: slackGatewayEnabled,
           mode: slackMode,
@@ -204,7 +210,7 @@ export async function saveConfig(
 
   // Remove apiKey if not provided (will fall back to env var)
   if (llmConfig && !llmConfig.apiKey) {
-    delete ((mainConfig.llm as Record<string, unknown>).apiKey);
+    delete (mainConfig.llm as Record<string, unknown>).apiKey;
   }
 
   const mainYaml = stringifyYaml(mainConfig, { indent: 2 });
@@ -216,7 +222,9 @@ export async function saveConfig(
 /**
  * Load configuration from file
  */
-export async function loadServiceConfig(configDir: string = '.runbook'): Promise<ServiceConfig | null> {
+export async function loadServiceConfig(
+  configDir: string = '.runbook'
+): Promise<ServiceConfig | null> {
   const configPath = join(configDir, 'services.yaml');
 
   if (!existsSync(configPath)) {
@@ -288,7 +296,11 @@ This wizard will help you set up:
     question: 'How are your AWS accounts organized?',
     options: [
       { value: 'single', label: 'Single account', description: 'All resources in one AWS account' },
-      { value: 'multi', label: 'Multiple accounts', description: 'Separate accounts for prod/staging/dev' },
+      {
+        value: 'multi',
+        label: 'Multiple accounts',
+        description: 'Separate accounts for prod/staging/dev',
+      },
       { value: 'skip', label: 'Skip for now', description: 'Configure manually later' },
     ],
   },
@@ -348,8 +360,16 @@ This wizard will help you set up:
   slackMode: {
     question: 'Which Slack gateway mode do you want?',
     options: [
-      { value: 'socket', label: 'Socket Mode', description: 'Best for local development; no public URL required' },
-      { value: 'http', label: 'HTTP Events API', description: 'Use public Slack Request URL + signing secret' },
+      {
+        value: 'socket',
+        label: 'Socket Mode',
+        description: 'Best for local development; no public URL required',
+      },
+      {
+        value: 'http',
+        label: 'HTTP Events API',
+        description: 'Use public Slack Request URL + signing secret',
+      },
     ],
   },
 

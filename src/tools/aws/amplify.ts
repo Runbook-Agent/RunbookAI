@@ -301,7 +301,9 @@ export async function checkAppHealth(
       const recentFailures = jobs.filter((j) => j.status === 'FAILED');
 
       if (recentFailures.length > 0) {
-        issues.push(`Branch ${branch.branchName} has ${recentFailures.length} recent failed deployments`);
+        issues.push(
+          `Branch ${branch.branchName} has ${recentFailures.length} recent failed deployments`
+        );
       }
 
       // Check if currently deploying

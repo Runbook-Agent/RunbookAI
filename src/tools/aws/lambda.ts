@@ -2,11 +2,7 @@
  * Lambda Tools
  */
 
-import {
-  LambdaClient,
-  ListFunctionsCommand,
-  GetFunctionCommand,
-} from '@aws-sdk/client-lambda';
+import { LambdaClient, ListFunctionsCommand, GetFunctionCommand } from '@aws-sdk/client-lambda';
 
 let client: LambdaClient | null = null;
 
@@ -58,7 +54,10 @@ export async function listFunctions(region?: string): Promise<LambdaFunction[]> 
   return functions;
 }
 
-export async function getFunction(functionName: string, region?: string): Promise<LambdaFunction | null> {
+export async function getFunction(
+  functionName: string,
+  region?: string
+): Promise<LambdaFunction | null> {
   const lambda = getClient(region);
 
   try {

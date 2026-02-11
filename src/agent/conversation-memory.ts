@@ -227,9 +227,7 @@ export class ConversationMemory {
    */
   searchMessages(query: string): ConversationMessage[] {
     const lowerQuery = query.toLowerCase();
-    return this.messages.filter((m) =>
-      m.content.toLowerCase().includes(lowerQuery)
-    );
+    return this.messages.filter((m) => m.content.toLowerCase().includes(lowerQuery));
   }
 
   /**
@@ -237,10 +235,11 @@ export class ConversationMemory {
    */
   searchInvestigations(query: string): InvestigationContext[] {
     const lowerQuery = query.toLowerCase();
-    return Array.from(this.investigations.values()).filter((inv) =>
-      inv.query.toLowerCase().includes(lowerQuery) ||
-      inv.conclusion?.rootCause.toLowerCase().includes(lowerQuery) ||
-      inv.triage?.summary.toLowerCase().includes(lowerQuery)
+    return Array.from(this.investigations.values()).filter(
+      (inv) =>
+        inv.query.toLowerCase().includes(lowerQuery) ||
+        inv.conclusion?.rootCause.toLowerCase().includes(lowerQuery) ||
+        inv.triage?.summary.toLowerCase().includes(lowerQuery)
     );
   }
 
@@ -292,7 +291,8 @@ export class ConversationMemory {
    * Format a message for context
    */
   private formatMessage(message: ConversationMessage): string {
-    const roleLabel = message.role === 'user' ? 'User' : message.role === 'assistant' ? 'Assistant' : 'System';
+    const roleLabel =
+      message.role === 'user' ? 'User' : message.role === 'assistant' ? 'Assistant' : 'System';
     return `${roleLabel}: ${message.content}`;
   }
 
@@ -352,9 +352,16 @@ export class ConversationMemory {
       // Simple topic extraction (could be enhanced with LLM)
       const words = msg.content.toLowerCase().split(/\s+/);
       for (const word of words) {
-        if (word.length > 5 && !['about', 'which', 'there', 'their', 'would', 'could', 'should'].includes(word)) {
+        if (
+          word.length > 5 &&
+          !['about', 'which', 'there', 'their', 'would', 'could', 'should'].includes(word)
+        ) {
           // Simple heuristic for potential topics
-          if (msg.content.match(new RegExp(`\\b${word}\\b.*(?:issue|problem|error|service|database|api|server)`, 'i'))) {
+          if (
+            msg.content.match(
+              new RegExp(`\\b${word}\\b.*(?:issue|problem|error|service|database|api|server)`, 'i')
+            )
+          ) {
             topics.add(word);
           }
         }
@@ -362,7 +369,9 @@ export class ConversationMemory {
 
       // Extract findings from assistant messages
       if (msg.role === 'assistant') {
-        const findingMatch = msg.content.match(/(?:found|discovered|identified|detected|root cause)[\s:]+([^.]+)/i);
+        const findingMatch = msg.content.match(
+          /(?:found|discovered|identified|detected|root cause)[\s:]+([^.]+)/i
+        );
         if (findingMatch) {
           findings.push(findingMatch[1].trim());
         }
@@ -388,7 +397,9 @@ export class ConversationMemory {
       const invSummaries: string[] = [];
       for (const inv of this.investigations.values()) {
         if (inv.conclusion) {
-          invSummaries.push(`${inv.query}: ${inv.conclusion.rootCause} (${inv.conclusion.confidence} confidence)`);
+          invSummaries.push(
+            `${inv.query}: ${inv.conclusion.rootCause} (${inv.conclusion.confidence} confidence)`
+          );
         }
       }
       if (invSummaries.length > 0) {
@@ -461,12 +472,16 @@ export class ConversationMemory {
    * Export memory to JSON
    */
   toJSON(): string {
-    return JSON.stringify({
-      messages: this.messages,
-      investigations: Array.from(this.investigations.entries()),
-      summaries: this.summaries,
-      config: this.config,
-    }, null, 2);
+    return JSON.stringify(
+      {
+        messages: this.messages,
+        investigations: Array.from(this.investigations.entries()),
+        summaries: this.summaries,
+        config: this.config,
+      },
+      null,
+      2
+    );
   }
 
   /**

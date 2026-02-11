@@ -126,7 +126,10 @@ export class ServiceGraph {
   /**
    * Update a service
    */
-  updateService(id: string, updates: Partial<Omit<ServiceNode, 'id' | 'createdAt'>>): ServiceNode | undefined {
+  updateService(
+    id: string,
+    updates: Partial<Omit<ServiceNode, 'id' | 'createdAt'>>
+  ): ServiceNode | undefined {
     const existing = this.nodes.get(id);
     if (!existing) return undefined;
 
@@ -340,7 +343,12 @@ export class ServiceGraph {
     const paths: ImpactPath[] = [];
     const visited = new Set<string>();
 
-    const traverse = (current: string, path: string[], depth: number, criticality: 'critical' | 'degraded' | 'optional') => {
+    const traverse = (
+      current: string,
+      path: string[],
+      depth: number,
+      criticality: 'critical' | 'degraded' | 'optional'
+    ) => {
       if (depth > maxDepth || visited.has(current)) return;
       visited.add(current);
 
@@ -376,7 +384,12 @@ export class ServiceGraph {
     const paths: ImpactPath[] = [];
     const visited = new Set<string>();
 
-    const traverse = (current: string, path: string[], depth: number, criticality: 'critical' | 'degraded' | 'optional') => {
+    const traverse = (
+      current: string,
+      path: string[],
+      depth: number,
+      criticality: 'critical' | 'degraded' | 'optional'
+    ) => {
       if (depth > maxDepth || visited.has(current)) return;
       visited.add(current);
 
@@ -538,10 +551,14 @@ export class ServiceGraph {
    * Export graph to JSON
    */
   toJSON(): string {
-    return JSON.stringify({
-      nodes: Array.from(this.nodes.values()),
-      edges: Array.from(this.edges.values()),
-    }, null, 2);
+    return JSON.stringify(
+      {
+        nodes: Array.from(this.nodes.values()),
+        edges: Array.from(this.edges.values()),
+      },
+      null,
+      2
+    );
   }
 
   /**

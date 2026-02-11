@@ -105,7 +105,8 @@ Determine:
           desiredCount: '{{target_count}}',
         },
         description: 'Scale {{service_name}} to {{target_count}} instances. Reason: {{reason}}',
-        rollbackCommand: 'Scale back to {{steps.check_current_state.result.desiredCount}} instances',
+        rollbackCommand:
+          'Scale back to {{steps.check_current_state.result.desiredCount}} instances',
       },
       onError: 'abort',
     },

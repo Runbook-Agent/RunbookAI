@@ -222,11 +222,7 @@ export class SafetyManager {
    */
   formatApprovalRequest(request: ApprovalRequest): string {
     const riskEmoji =
-      request.risk === 'critical'
-        ? '🔴'
-        : request.risk === 'high_risk'
-          ? '🟠'
-          : '🟡';
+      request.risk === 'critical' ? '🔴' : request.risk === 'high_risk' ? '🟠' : '🟡';
 
     let output = `
 ${riskEmoji} **Approval Required** (${request.risk.replace('_', ' ').toUpperCase()})
@@ -263,7 +259,11 @@ ${request.rollbackCommand}
   /**
    * Get current session stats
    */
-  getSessionStats(): { mutationCount: number; maxMutations: number; lastCriticalTime: number | null } {
+  getSessionStats(): {
+    mutationCount: number;
+    maxMutations: number;
+    lastCriticalTime: number | null;
+  } {
     return {
       mutationCount: this.mutationCount,
       maxMutations: this.config.maxMutationsPerSession,

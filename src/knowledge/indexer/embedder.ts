@@ -83,7 +83,7 @@ export async function embedText(text: string): Promise<number[]> {
     throw new Error(`OpenAI API error: ${response.status} ${error}`);
   }
 
-  const data = await response.json() as {
+  const data = (await response.json()) as {
     data: Array<{ embedding: number[]; index: number }>;
     usage: { prompt_tokens: number; total_tokens: number };
   };
@@ -143,7 +143,7 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
       throw new Error(`OpenAI API error: ${response.status} ${error}`);
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       data: Array<{ embedding: number[]; index: number }>;
       usage: { prompt_tokens: number; total_tokens: number };
     };

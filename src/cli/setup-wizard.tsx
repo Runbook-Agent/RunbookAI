@@ -159,7 +159,9 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
   const [databaseServices, setDatabaseServices] = useState<string[]>([]);
   const [useCloudWatch, setUseCloudWatch] = useState(true);
   const [useKubernetes, setUseKubernetes] = useState(false);
-  const [incidentProvider, setIncidentProvider] = useState<'pagerduty' | 'opsgenie' | 'none'>('none');
+  const [incidentProvider, setIncidentProvider] = useState<'pagerduty' | 'opsgenie' | 'none'>(
+    'none'
+  );
   const [useSlackGateway, setUseSlackGateway] = useState(false);
   const [slackMode, setSlackMode] = useState<'http' | 'socket'>('socket');
   const [slackAlertChannels, setSlackAlertChannels] = useState('');
@@ -200,8 +202,7 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     const hydrateFromExistingProfile = async () => {
       try {
         const hasMainConfigFile =
-          existsSync(join(configDir, 'config.yaml')) ||
-          existsSync(join(configDir, 'config.yml'));
+          existsSync(join(configDir, 'config.yaml')) || existsSync(join(configDir, 'config.yml'));
         const hasServicesConfigFile = existsSync(join(configDir, 'services.yaml'));
 
         if (!hasMainConfigFile && !hasServicesConfigFile) {
@@ -223,7 +224,11 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
         setHasExistingProfile(true);
 
         // LLM
-        if (mainConfig.llm.provider === 'anthropic' || mainConfig.llm.provider === 'openai' || mainConfig.llm.provider === 'ollama') {
+        if (
+          mainConfig.llm.provider === 'anthropic' ||
+          mainConfig.llm.provider === 'openai' ||
+          mainConfig.llm.provider === 'ollama'
+        ) {
           setLlmProvider(mainConfig.llm.provider);
         }
         if (mainConfig.llm.apiKey) {
@@ -345,13 +350,24 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     try {
       const answers: OnboardingAnswers = {
         accountSetup,
-        accounts: accountSetup !== 'skip' ? [{
-          name: 'default',
-          regions: regions.split(',').map((r) => r.trim()),
-          isDefault: true,
-        }] : undefined,
-        computeServices: computeServices.length > 0 ? computeServices as OnboardingAnswers['computeServices'] : ['none'],
-        databaseServices: databaseServices.length > 0 ? databaseServices as OnboardingAnswers['databaseServices'] : ['none'],
+        accounts:
+          accountSetup !== 'skip'
+            ? [
+                {
+                  name: 'default',
+                  regions: regions.split(',').map((r) => r.trim()),
+                  isDefault: true,
+                },
+              ]
+            : undefined,
+        computeServices:
+          computeServices.length > 0
+            ? (computeServices as OnboardingAnswers['computeServices'])
+            : ['none'],
+        databaseServices:
+          databaseServices.length > 0
+            ? (databaseServices as OnboardingAnswers['databaseServices'])
+            : ['none'],
         useCloudWatch,
         useKubernetes,
         incidentProvider,
@@ -360,23 +376,28 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
       };
 
       const config = generateConfig(answers);
-      await saveConfig(config, configDir, {
-        provider: llmProvider,
-        apiKey: llmApiKey || undefined,
-      }, {
-        enableKubernetes: useKubernetes,
-        enableSlackGateway: useSlackGateway,
-        slackMode,
-        slackAlertChannels: slackAlertChannels
-          .split(',')
-          .map((c) => c.trim())
-          .filter(Boolean),
-        slackAllowedUsers: slackAllowedUsers
-          .split(',')
-          .map((u) => u.trim())
-          .filter(Boolean),
-        slackRequireThreadedMentions,
-      });
+      await saveConfig(
+        config,
+        configDir,
+        {
+          provider: llmProvider,
+          apiKey: llmApiKey || undefined,
+        },
+        {
+          enableKubernetes: useKubernetes,
+          enableSlackGateway: useSlackGateway,
+          slackMode,
+          slackAlertChannels: slackAlertChannels
+            .split(',')
+            .map((c) => c.trim())
+            .filter(Boolean),
+          slackAllowedUsers: slackAllowedUsers
+            .split(',')
+            .map((u) => u.trim())
+            .filter(Boolean),
+          slackRequireThreadedMentions,
+        }
+      );
       setStep('done');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -403,7 +424,8 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
             ═══════════════════════════════════════════
           </Text>
           <Text color="cyan" bold>
-            {' '}Runbook Setup Wizard
+            {' '}
+            Runbook Setup Wizard
           </Text>
           <Text color="cyan" bold>
             ═══════════════════════════════════════════
@@ -411,7 +433,9 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
           <Text>{ONBOARDING_PROMPTS.welcome}</Text>
           {hasExistingProfile && (
             <Box marginTop={1}>
-              <Text color="yellow">Existing profile found. Press Enter on each step to keep current values.</Text>
+              <Text color="yellow">
+                Existing profile found. Press Enter on each step to keep current values.
+              </Text>
             </Box>
           )}
           <Box marginTop={1}>
@@ -423,16 +447,28 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'llm_provider':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 1: Choose your AI provider</Text>
-          {hasExistingProfile && (
-            <Text color="gray">Current: {llmProvider}</Text>
-          )}
+          <Text bold color="yellow">
+            Step 1: Choose your AI provider
+          </Text>
+          {hasExistingProfile && <Text color="gray">Current: {llmProvider}</Text>}
           <Box marginTop={1}>
             <SingleSelect
               options={[
-                { value: 'anthropic', label: 'Anthropic (Claude)', description: 'Recommended - best for complex reasoning' },
-                { value: 'openai', label: 'OpenAI (GPT-4)', description: 'Popular alternative with broad capabilities' },
-                { value: 'ollama', label: 'Ollama (Local)', description: 'Run models locally - no API key required' },
+                {
+                  value: 'anthropic',
+                  label: 'Anthropic (Claude)',
+                  description: 'Recommended - best for complex reasoning',
+                },
+                {
+                  value: 'openai',
+                  label: 'OpenAI (GPT-4)',
+                  description: 'Popular alternative with broad capabilities',
+                },
+                {
+                  value: 'ollama',
+                  label: 'Ollama (Local)',
+                  description: 'Run models locally - no API key required',
+                },
               ]}
               focusedIndex={focusedIndex}
               onSelect={(value) => {
@@ -452,7 +488,9 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'llm_key':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 2: Enter your API key</Text>
+          <Text bold color="yellow">
+            Step 2: Enter your API key
+          </Text>
           {hasExistingProfile && llmApiKey && (
             <Text color="gray">Current key is set. Press Enter to keep it.</Text>
           )}
@@ -486,10 +524,10 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'account':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 3: {ONBOARDING_PROMPTS.accountSetup.question}</Text>
-          {hasExistingProfile && (
-            <Text color="gray">Current: {accountSetup}</Text>
-          )}
+          <Text bold color="yellow">
+            Step 3: {ONBOARDING_PROMPTS.accountSetup.question}
+          </Text>
+          {hasExistingProfile && <Text color="gray">Current: {accountSetup}</Text>}
           <Box marginTop={1}>
             <SingleSelect
               options={ONBOARDING_PROMPTS.accountSetup.options}
@@ -506,10 +544,10 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'regions':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 4: AWS Regions</Text>
-          {hasExistingProfile && (
-            <Text color="gray">Current: {regions}</Text>
-          )}
+          <Text bold color="yellow">
+            Step 4: AWS Regions
+          </Text>
+          {hasExistingProfile && <Text color="gray">Current: {regions}</Text>}
           <Box marginTop={1}>
             <TextInput
               prompt="Enter AWS regions (comma-separated, e.g., us-east-1,us-west-2):"
@@ -526,7 +564,9 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'compute':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 5: {ONBOARDING_PROMPTS.computeServices.question}</Text>
+          <Text bold color="yellow">
+            Step 5: {ONBOARDING_PROMPTS.computeServices.question}
+          </Text>
           <Box marginTop={1}>
             <MultiSelect
               options={ONBOARDING_PROMPTS.computeServices.options}
@@ -548,7 +588,9 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'database':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 6: {ONBOARDING_PROMPTS.databaseServices.question}</Text>
+          <Text bold color="yellow">
+            Step 6: {ONBOARDING_PROMPTS.databaseServices.question}
+          </Text>
           <Box marginTop={1}>
             <MultiSelect
               options={ONBOARDING_PROMPTS.databaseServices.options}
@@ -570,10 +612,10 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'observability':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 7: {ONBOARDING_PROMPTS.observability.question}</Text>
-          {hasExistingProfile && (
-            <Text color="gray">Current: {useCloudWatch ? 'Yes' : 'No'}</Text>
-          )}
+          <Text bold color="yellow">
+            Step 7: {ONBOARDING_PROMPTS.observability.question}
+          </Text>
+          {hasExistingProfile && <Text color="gray">Current: {useCloudWatch ? 'Yes' : 'No'}</Text>}
           <Box marginTop={1}>
             <SingleSelect
               options={ONBOARDING_PROMPTS.observability.options.map((o) => ({
@@ -594,10 +636,10 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'kubernetes':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 8: {ONBOARDING_PROMPTS.kubernetes.question}</Text>
-          {hasExistingProfile && (
-            <Text color="gray">Current: {useKubernetes ? 'Yes' : 'No'}</Text>
-          )}
+          <Text bold color="yellow">
+            Step 8: {ONBOARDING_PROMPTS.kubernetes.question}
+          </Text>
+          {hasExistingProfile && <Text color="gray">Current: {useKubernetes ? 'Yes' : 'No'}</Text>}
           <Box marginTop={1}>
             <SingleSelect
               options={ONBOARDING_PROMPTS.kubernetes.options.map((o) => ({
@@ -618,10 +660,10 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'incident':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 9: {ONBOARDING_PROMPTS.incidentProvider.question}</Text>
-          {hasExistingProfile && (
-            <Text color="gray">Current: {incidentProvider}</Text>
-          )}
+          <Text bold color="yellow">
+            Step 9: {ONBOARDING_PROMPTS.incidentProvider.question}
+          </Text>
+          {hasExistingProfile && <Text color="gray">Current: {incidentProvider}</Text>}
           <Box marginTop={1}>
             <SingleSelect
               options={ONBOARDING_PROMPTS.incidentProvider.options}
@@ -638,7 +680,9 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'slack_gateway':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 10: {ONBOARDING_PROMPTS.slackGateway.question}</Text>
+          <Text bold color="yellow">
+            Step 10: {ONBOARDING_PROMPTS.slackGateway.question}
+          </Text>
           {hasExistingProfile && (
             <Text color="gray">Current: {useSlackGateway ? 'Yes' : 'No'}</Text>
           )}
@@ -667,10 +711,10 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'slack_mode':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 11: {ONBOARDING_PROMPTS.slackMode.question}</Text>
-          {hasExistingProfile && (
-            <Text color="gray">Current: {slackMode}</Text>
-          )}
+          <Text bold color="yellow">
+            Step 11: {ONBOARDING_PROMPTS.slackMode.question}
+          </Text>
+          {hasExistingProfile && <Text color="gray">Current: {slackMode}</Text>}
           <Box marginTop={1}>
             <SingleSelect
               options={ONBOARDING_PROMPTS.slackMode.options}
@@ -687,7 +731,9 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'slack_channels':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 12: Slack Alert Channels</Text>
+          <Text bold color="yellow">
+            Step 12: Slack Alert Channels
+          </Text>
           {hasExistingProfile && slackAlertChannels && (
             <Text color="gray">Current: {slackAlertChannels}</Text>
           )}
@@ -707,7 +753,9 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'slack_users':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 13: Slack Allowed Users</Text>
+          <Text bold color="yellow">
+            Step 13: Slack Allowed Users
+          </Text>
           {hasExistingProfile && slackAllowedUsers && (
             <Text color="gray">Current: {slackAllowedUsers}</Text>
           )}
@@ -727,15 +775,25 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
     case 'slack_threads':
       return (
         <Box flexDirection="column">
-          <Text bold color="yellow">Step 14: Require Threaded Mentions?</Text>
+          <Text bold color="yellow">
+            Step 14: Require Threaded Mentions?
+          </Text>
           {hasExistingProfile && (
             <Text color="gray">Current: {slackRequireThreadedMentions ? 'Yes' : 'No'}</Text>
           )}
           <Box marginTop={1}>
             <SingleSelect
               options={[
-                { value: 'true', label: 'Yes', description: 'Only handle @runbookAI mentions in threads' },
-                { value: 'false', label: 'No', description: 'Allow mentions in channel root and threads' },
+                {
+                  value: 'true',
+                  label: 'Yes',
+                  description: 'Only handle @runbookAI mentions in threads',
+                },
+                {
+                  value: 'false',
+                  label: 'No',
+                  description: 'Allow mentions in channel root and threads',
+                },
               ]}
               focusedIndex={focusedIndex}
               onSelect={(value) => {
@@ -768,7 +826,8 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
                 ═══════════════════════════════════════════
               </Text>
               <Text color="green" bold>
-                {' '}Setup Complete!
+                {' '}
+                Setup Complete!
               </Text>
               <Text color="green" bold>
                 ═══════════════════════════════════════════
@@ -777,14 +836,23 @@ export function SetupWizard({ configDir = '.runbook' }: SetupWizardProps) {
 
               <Box marginTop={1} flexDirection="column">
                 <Text bold>Your configuration:</Text>
-                <Text>• AI Provider: {llmProvider}{llmApiKey ? ' (key configured)' : ''}</Text>
+                <Text>
+                  • AI Provider: {llmProvider}
+                  {llmApiKey ? ' (key configured)' : ''}
+                </Text>
                 <Text>• Regions: {regions}</Text>
-                <Text>• Compute: {computeServices.length > 0 ? computeServices.join(', ') : 'none'}</Text>
-                <Text>• Databases: {databaseServices.length > 0 ? databaseServices.join(', ') : 'none'}</Text>
+                <Text>
+                  • Compute: {computeServices.length > 0 ? computeServices.join(', ') : 'none'}
+                </Text>
+                <Text>
+                  • Databases: {databaseServices.length > 0 ? databaseServices.join(', ') : 'none'}
+                </Text>
                 <Text>• CloudWatch: {useCloudWatch ? 'enabled' : 'disabled'}</Text>
                 <Text>• Kubernetes tools: {useKubernetes ? 'enabled' : 'disabled'}</Text>
                 <Text>• Incidents: {incidentProvider}</Text>
-                <Text>• Slack gateway: {useSlackGateway ? `enabled (${slackMode})` : 'disabled'}</Text>
+                <Text>
+                  • Slack gateway: {useSlackGateway ? `enabled (${slackMode})` : 'disabled'}
+                </Text>
               </Box>
             </>
           )}

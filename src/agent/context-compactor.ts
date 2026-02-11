@@ -85,11 +85,11 @@ export interface CompactorConfig {
 
 const DEFAULT_CONFIG: CompactorConfig = {
   weights: {
-    recency: 0.20,
-    queryRelevance: 0.20,
-    errorSignals: 0.20,
+    recency: 0.2,
+    queryRelevance: 0.2,
+    errorSignals: 0.2,
     hypothesisRelevance: 0.15,
-    serviceRelevance: 0.10,
+    serviceRelevance: 0.1,
     citedInNotes: 0.15,
   },
   maxFullResults: 10,
@@ -173,10 +173,7 @@ export class ContextCompactor {
         context.servicesUnderInvestigation,
         context.compact
       ),
-      citedInNotes: this.scoreCitedInNotes(
-        context.compact?.resultId,
-        context.resultIdToCited
-      ),
+      citedInNotes: this.scoreCitedInNotes(context.compact?.resultId, context.resultIdToCited),
     };
   }
 
@@ -195,13 +192,14 @@ export class ContextCompactor {
    */
   private scoreQueryRelevance(entry: ToolResultEntry, query: string): number {
     const queryLower = query.toLowerCase();
-    const queryWords = new Set(queryLower.split(/\s+/).filter(w => w.length > 2));
+    const queryWords = new Set(queryLower.split(/\s+/).filter((w) => w.length > 2));
 
     // Check tool args for query relevance
     const argsStr = JSON.stringify(entry.args).toLowerCase();
-    const resultStr = typeof entry.result === 'string'
-      ? entry.result.toLowerCase()
-      : JSON.stringify(entry.result).toLowerCase();
+    const resultStr =
+      typeof entry.result === 'string'
+        ? entry.result.toLowerCase()
+        : JSON.stringify(entry.result).toLowerCase();
 
     // Count matching words
     let matchCount = 0;
@@ -218,10 +216,7 @@ export class ContextCompactor {
   /**
    * Score based on error signals in the result.
    */
-  private scoreErrorSignals(
-    entry: ToolResultEntry,
-    compact?: CompactToolResult
-  ): number {
+  private scoreErrorSignals(entry: ToolResultEntry, compact?: CompactToolResult): number {
     // Use compact result's hasErrors flag if available
     if (compact?.hasErrors) {
       return 1.0;
@@ -236,17 +231,18 @@ export class ContextCompactor {
     }
 
     // Fallback: check raw result for error patterns
-    const resultStr = typeof entry.result === 'string'
-      ? entry.result.toLowerCase()
-      : JSON.stringify(entry.result).toLowerCase();
+    const resultStr =
+      typeof entry.result === 'string'
+        ? entry.result.toLowerCase()
+        : JSON.stringify(entry.result).toLowerCase();
 
     const criticalKeywords = ['error', 'failed', 'exception', 'critical', 'alarm'];
     const warningKeywords = ['warning', 'timeout', 'unhealthy', 'degraded'];
 
-    if (criticalKeywords.some(kw => resultStr.includes(kw))) {
+    if (criticalKeywords.some((kw) => resultStr.includes(kw))) {
       return 1.0;
     }
-    if (warningKeywords.some(kw => resultStr.includes(kw))) {
+    if (warningKeywords.some((kw) => resultStr.includes(kw))) {
       return 0.6;
     }
 
@@ -273,13 +269,13 @@ export class ContextCompactor {
     // Check if this result was gathered as evidence for a hypothesis
     if (investigationState) {
       const evidenceNotes = investigationState.notes.filter(
-        n => n.type === 'evidence' && n.hypothesisId
+        (n) => n.type === 'evidence' && n.hypothesisId
       );
 
       for (const note of evidenceNotes) {
         if (
           hypothesisIds.includes(note.hypothesisId!) &&
-          note.sourceResultIds.some(id => this.resultMatchesId(entry, id))
+          note.sourceResultIds.some((id) => this.resultMatchesId(entry, id))
         ) {
           // Strong match: evidence for active hypothesis
           return note.evidenceStrength === 'strong' ? 1.0 : 0.7;
@@ -317,16 +313,17 @@ export class ContextCompactor {
     // Use compact result's services if available
     const resultServices = compact?.services || [];
     const argsStr = JSON.stringify(entry.args).toLowerCase();
-    const resultStr = typeof entry.result === 'string'
-      ? entry.result.toLowerCase()
-      : JSON.stringify(entry.result).toLowerCase();
+    const resultStr =
+      typeof entry.result === 'string'
+        ? entry.result.toLowerCase()
+        : JSON.stringify(entry.result).toLowerCase();
 
     // Check for service matches
     for (const service of servicesUnderInvestigation) {
       const serviceLower = service.toLowerCase();
 
       // Direct match in compact services
-      if (resultServices.some(s => s.toLowerCase().includes(serviceLower))) {
+      if (resultServices.some((s) => s.toLowerCase().includes(serviceLower))) {
         return 1.0;
       }
 
@@ -342,10 +339,7 @@ export class ContextCompactor {
   /**
    * Score based on whether result is cited in investigation notes.
    */
-  private scoreCitedInNotes(
-    resultId?: string,
-    resultIdToCited?: Map<string, boolean>
-  ): number {
+  private scoreCitedInNotes(resultId?: string, resultIdToCited?: Map<string, boolean>): number {
     if (!resultId || !resultIdToCited) {
       return 0.0;
     }
@@ -470,10 +464,7 @@ export class ContextCompactor {
   /**
    * Compact with a specific token budget.
    */
-  private compactWithBudget(
-    sorted: ScoredResult[],
-    budget: number
-  ): CompactionPlan {
+  private compactWithBudget(sorted: ScoredResult[], budget: number): CompactionPlan {
     const keepFull: ScoredResult[] = [];
     const keepCompact: ScoredResult[] = [];
     const clear: ScoredResult[] = [];
@@ -484,10 +475,7 @@ export class ContextCompactor {
       const fullCost = this.config.tokensPerFullResult;
       const compactCost = this.config.tokensPerCompactResult;
 
-      if (
-        usedTokens + fullCost <= budget &&
-        result.score >= this.config.minScoreForFull
-      ) {
+      if (usedTokens + fullCost <= budget && result.score >= this.config.minScoreForFull) {
         // Keep full
         result.keepFull = true;
         keepFull.push(result);
@@ -554,9 +542,7 @@ export class ContextCompactor {
             `- [${result.compact.resultId}] ${result.entry.tool}: ${result.compact.summary}`
           );
         } else {
-          sections.push(
-            `- ${result.entry.tool}: ${this.quickSummarize(result.entry)}`
-          );
+          sections.push(`- ${result.entry.tool}: ${this.quickSummarize(result.entry)}`);
         }
       }
     }
@@ -575,9 +561,8 @@ export class ContextCompactor {
    * Quick summarize for results without compact representation.
    */
   private quickSummarize(entry: ToolResultEntry): string {
-    const resultStr = typeof entry.result === 'string'
-      ? entry.result
-      : JSON.stringify(entry.result);
+    const resultStr =
+      typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result);
 
     if (resultStr.length <= 100) {
       return resultStr;
@@ -619,10 +604,10 @@ export function createCompactor(
       weights: {
         recency: 0.15,
         queryRelevance: 0.15,
-        errorSignals: 0.30,
-        hypothesisRelevance: 0.20,
-        serviceRelevance: 0.10,
-        citedInNotes: 0.10,
+        errorSignals: 0.3,
+        hypothesisRelevance: 0.2,
+        serviceRelevance: 0.1,
+        citedInNotes: 0.1,
       },
       maxFullResults: 15,
       minScoreForFull: 0.5,
@@ -631,10 +616,10 @@ export function createCompactor(
       // Research: prioritize query relevance and recency
       weights: {
         recency: 0.25,
-        queryRelevance: 0.30,
-        errorSignals: 0.10,
-        hypothesisRelevance: 0.10,
-        serviceRelevance: 0.10,
+        queryRelevance: 0.3,
+        errorSignals: 0.1,
+        hypothesisRelevance: 0.1,
+        serviceRelevance: 0.1,
         citedInNotes: 0.15,
       },
       maxFullResults: 8,
