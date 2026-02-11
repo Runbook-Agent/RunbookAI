@@ -100,9 +100,38 @@ export interface ExtractionConfig {
 }
 
 const DEFAULT_EXTRACTION_CONFIG: ExtractionConfig = {
-  symptomKeywords: ['error', 'failed', 'timeout', 'latency', 'spike', 'dropped', 'unavailable', 'unhealthy', 'alarm', 'alert'],
-  evidenceKeywords: ['found', 'discovered', 'shows', 'indicates', 'reveals', 'observed', 'detected', 'correlates', 'matches'],
-  rootCauseKeywords: ['root cause', 'caused by', 'due to', 'because', 'resulted from', 'triggered by', 'originated from'],
+  symptomKeywords: [
+    'error',
+    'failed',
+    'timeout',
+    'latency',
+    'spike',
+    'dropped',
+    'unavailable',
+    'unhealthy',
+    'alarm',
+    'alert',
+  ],
+  evidenceKeywords: [
+    'found',
+    'discovered',
+    'shows',
+    'indicates',
+    'reveals',
+    'observed',
+    'detected',
+    'correlates',
+    'matches',
+  ],
+  rootCauseKeywords: [
+    'root cause',
+    'caused by',
+    'due to',
+    'because',
+    'resulted from',
+    'triggered by',
+    'originated from',
+  ],
   servicePatterns: [
     /service[:\s]+([a-zA-Z0-9_-]+)/gi,
     /([a-zA-Z0-9_-]+)-service/gi,
@@ -226,7 +255,7 @@ export class InvestigationMemory {
     // Auto-update services discovered
     if (note.servicesInvolved.length > 0) {
       const newServices = note.servicesInvolved.filter(
-        s => !this.state.servicesDiscovered.includes(s)
+        (s) => !this.state.servicesDiscovered.includes(s)
       );
       this.state.servicesDiscovered.push(...newServices);
     }
@@ -292,7 +321,7 @@ export class InvestigationMemory {
 
     if (action === 'pruned') {
       this.state.activeHypotheses = this.state.activeHypotheses.filter(
-        id => id !== hypothesis.id
+        (id) => id !== hypothesis.id
       );
       if (!this.state.prunedHypotheses.includes(hypothesis.id)) {
         this.state.prunedHypotheses.push(hypothesis.id);
@@ -304,8 +333,8 @@ export class InvestigationMemory {
         hypothesis: hypothesis.statement,
         confidence: 'high',
         evidence: this.state.notes
-          .filter(n => n.hypothesisId === hypothesis.id && n.type === 'evidence')
-          .map(n => n.content),
+          .filter((n) => n.hypothesisId === hypothesis.id && n.type === 'evidence')
+          .map((n) => n.content),
       };
     }
 
@@ -366,7 +395,7 @@ export class InvestigationMemory {
    */
   extractFromThinking(thinkingText: string, resultId?: string): InvestigationNote[] {
     const notes: InvestigationNote[] = [];
-    const sentences = thinkingText.split(/[.!?]+/).filter(s => s.trim().length > 15);
+    const sentences = thinkingText.split(/[.!?]+/).filter((s) => s.trim().length > 15);
 
     for (const sentence of sentences) {
       const trimmed = sentence.trim();
@@ -387,18 +416,18 @@ export class InvestigationMemory {
       let type: FindingType = 'evidence';
       let confidence: ConfidenceLevel = 'medium';
 
-      if (this.extractionConfig.rootCauseKeywords.some(kw => lower.includes(kw))) {
+      if (this.extractionConfig.rootCauseKeywords.some((kw) => lower.includes(kw))) {
         type = 'root_cause_candidate';
         confidence = 'high';
-      } else if (this.extractionConfig.symptomKeywords.some(kw => lower.includes(kw))) {
+      } else if (this.extractionConfig.symptomKeywords.some((kw) => lower.includes(kw))) {
         type = 'symptom';
         confidence = 'high';
         // Add to symptoms list
         const symptomSummary = trimmed.slice(0, 100);
-        if (!this.state.symptomsIdentified.some(s => s.includes(symptomSummary.slice(0, 30)))) {
+        if (!this.state.symptomsIdentified.some((s) => s.includes(symptomSummary.slice(0, 30)))) {
           this.state.symptomsIdentified.push(symptomSummary);
         }
-      } else if (this.extractionConfig.evidenceKeywords.some(kw => lower.includes(kw))) {
+      } else if (this.extractionConfig.evidenceKeywords.some((kw) => lower.includes(kw))) {
         type = 'evidence';
         confidence = 'medium';
       } else {
@@ -422,7 +451,7 @@ export class InvestigationMemory {
    * Add services discovered during investigation.
    */
   addDiscoveredServices(services: string[]): void {
-    const newServices = services.filter(s => !this.state.servicesDiscovered.includes(s));
+    const newServices = services.filter((s) => !this.state.servicesDiscovered.includes(s));
     if (newServices.length > 0) {
       this.state.servicesDiscovered.push(...newServices);
       this.state.lastUpdatedAt = new Date().toISOString();
@@ -450,30 +479,28 @@ export class InvestigationMemory {
    * Get notes by type.
    */
   getNotesByType(type: FindingType): InvestigationNote[] {
-    return this.state.notes.filter(n => n.type === type);
+    return this.state.notes.filter((n) => n.type === type);
   }
 
   /**
    * Get notes for a specific hypothesis.
    */
   getNotesByHypothesis(hypothesisId: string): InvestigationNote[] {
-    return this.state.notes.filter(n => n.hypothesisId === hypothesisId);
+    return this.state.notes.filter((n) => n.hypothesisId === hypothesisId);
   }
 
   /**
    * Get evidence notes with strong support.
    */
   getStrongEvidence(): InvestigationNote[] {
-    return this.state.notes.filter(
-      n => n.type === 'evidence' && n.evidenceStrength === 'strong'
-    );
+    return this.state.notes.filter((n) => n.type === 'evidence' && n.evidenceStrength === 'strong');
   }
 
   /**
    * Check if any notes reference a result ID.
    */
   isResultCited(resultId: string): boolean {
-    return this.state.notes.some(n => n.sourceResultIds.includes(resultId));
+    return this.state.notes.some((n) => n.sourceResultIds.includes(resultId));
   }
 
   /**
@@ -501,13 +528,15 @@ export class InvestigationMemory {
 
     // Services discovered
     if (this.state.servicesDiscovered.length > 0) {
-      sections.push(`**Services involved:** ${this.state.servicesDiscovered.slice(0, 10).join(', ')}`);
+      sections.push(
+        `**Services involved:** ${this.state.servicesDiscovered.slice(0, 10).join(', ')}`
+      );
     }
 
     // Symptoms identified
     if (this.state.symptomsIdentified.length > 0) {
       sections.push('**Symptoms:**');
-      this.state.symptomsIdentified.slice(0, 5).forEach(s => {
+      this.state.symptomsIdentified.slice(0, 5).forEach((s) => {
         sections.push(`- ${s.slice(0, 100)}`);
       });
     }
@@ -526,7 +555,7 @@ export class InvestigationMemory {
     const rootCauseCandidates = this.getNotesByType('root_cause_candidate');
     if (rootCauseCandidates.length > 0) {
       sections.push('**Root cause candidates:**');
-      rootCauseCandidates.slice(-3).forEach(n => {
+      rootCauseCandidates.slice(-3).forEach((n) => {
         sections.push(`- ${n.content.slice(0, 100)} (${n.confidence})`);
       });
     }
@@ -559,7 +588,7 @@ export class InvestigationMemory {
       sections.push(`Confidence: ${this.state.confirmedRootCause.confidence}`);
       if (this.state.confirmedRootCause.evidence.length > 0) {
         sections.push('\n**Supporting Evidence:**');
-        this.state.confirmedRootCause.evidence.slice(0, 5).forEach(e => {
+        this.state.confirmedRootCause.evidence.slice(0, 5).forEach((e) => {
           sections.push(`- ${e.slice(0, 150)}`);
         });
       }
@@ -574,7 +603,7 @@ export class InvestigationMemory {
     // Key symptoms
     if (this.state.symptomsIdentified.length > 0) {
       sections.push('\n**Symptoms Observed:**');
-      this.state.symptomsIdentified.slice(0, 5).forEach(s => {
+      this.state.symptomsIdentified.slice(0, 5).forEach((s) => {
         sections.push(`- ${s.slice(0, 100)}`);
       });
     }
@@ -583,7 +612,7 @@ export class InvestigationMemory {
     const remediations = this.getNotesByType('remediation_step');
     if (remediations.length > 0) {
       sections.push('\n**Suggested Remediation:**');
-      remediations.forEach(r => {
+      remediations.forEach((r) => {
         sections.push(`- ${r.content}`);
       });
     }
@@ -602,13 +631,13 @@ export class InvestigationMemory {
    * Check if services need re-querying based on new discoveries.
    */
   hasNewServicesForKnowledgeQuery(previousServices: string[]): string[] {
-    return this.state.servicesDiscovered.filter(s => !previousServices.includes(s));
+    return this.state.servicesDiscovered.filter((s) => !previousServices.includes(s));
   }
 
   /**
    * Check if symptoms need re-querying for known issues.
    */
   hasNewSymptomsForKnownIssueQuery(previousSymptoms: string[]): string[] {
-    return this.state.symptomsIdentified.filter(s => !previousSymptoms.includes(s));
+    return this.state.symptomsIdentified.filter((s) => !previousSymptoms.includes(s));
   }
 }

@@ -210,12 +210,13 @@ export class InfraContextManager {
    * Discover resource inventory.
    */
   private async discoverInventory(): Promise<void> {
-    const { executeMultiServiceQuery, getInstalledServices } = await import('../providers/aws/executor');
+    const { executeMultiServiceQuery, getInstalledServices } =
+      await import('../providers/aws/executor');
     const { getServiceById, AWS_SERVICES } = await import('../providers/aws/services');
 
     // Get services to query
     const servicesToQuery = this.config.services
-      .map(id => getServiceById(id))
+      .map((id) => getServiceById(id))
       .filter((s): s is NonNullable<typeof s> => s !== undefined);
 
     // Filter to installed services only
@@ -310,7 +311,8 @@ export class InfraContextManager {
               state: alarm.stateValue as 'ALARM' | 'OK' | 'INSUFFICIENT_DATA',
               service: this.extractServiceFromAlarm(alarmRecord),
               region,
-              lastStateChange: (alarmRecord.stateUpdatedTimestamp || alarmRecord.StateUpdatedTimestamp) as string | undefined,
+              lastStateChange: (alarmRecord.stateUpdatedTimestamp ||
+                alarmRecord.StateUpdatedTimestamp) as string | undefined,
             });
           }
         }
@@ -465,10 +467,12 @@ export class InfraContextManager {
 
     // Health summary
     const { healthSummary } = this.context;
-    const healthEmoji = healthSummary.overall === 'healthy' ? '✓' :
-                        healthSummary.overall === 'degraded' ? '!' : '✗';
+    const healthEmoji =
+      healthSummary.overall === 'healthy' ? '✓' : healthSummary.overall === 'degraded' ? '!' : '✗';
     sections.push(`**Status:** ${healthEmoji} ${healthSummary.overall.toUpperCase()}`);
-    sections.push(`Resources: ${healthSummary.healthy} healthy, ${healthSummary.warning} warning, ${healthSummary.critical} critical`);
+    sections.push(
+      `Resources: ${healthSummary.healthy} healthy, ${healthSummary.warning} warning, ${healthSummary.critical} critical`
+    );
 
     if (healthSummary.alarmsActive > 0) {
       sections.push(`Active alarms: ${healthSummary.alarmsActive}`);
@@ -477,8 +481,9 @@ export class InfraContextManager {
     // Service inventory
     if (this.context.inventory.size > 0) {
       sections.push('\n**Service Inventory:**');
-      const sorted = Array.from(this.context.inventory.entries())
-        .sort((a, b) => b[1].count - a[1].count);
+      const sorted = Array.from(this.context.inventory.entries()).sort(
+        (a, b) => b[1].count - a[1].count
+      );
 
       for (const [serviceId, inv] of sorted.slice(0, 8)) {
         const status = inv.unhealthy > 0 ? ` (${inv.unhealthy} unhealthy)` : '';
@@ -498,8 +503,7 @@ export class InfraContextManager {
     if (this.context.recentDeployments.length > 0) {
       sections.push('\n**Recent Deployments:**');
       for (const deploy of this.context.recentDeployments.slice(0, 3)) {
-        const status = deploy.status === 'success' ? '✓' :
-                       deploy.status === 'failed' ? '✗' : '...';
+        const status = deploy.status === 'success' ? '✓' : deploy.status === 'failed' ? '✗' : '...';
         sections.push(`- ${deploy.service}: ${status} ${deploy.deployedAt}`);
       }
     }

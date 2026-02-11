@@ -24,7 +24,10 @@ const credentialCache = new Map<string, AwsCredentialIdentity>();
 /**
  * Get credentials for an AWS account
  */
-async function getCredentials(account: AWSAccount, region: string): Promise<AwsCredentialIdentity | undefined> {
+async function getCredentials(
+  account: AWSAccount,
+  region: string
+): Promise<AwsCredentialIdentity | undefined> {
   const cacheKey = `${account.name}:${region}`;
 
   if (credentialCache.has(cacheKey)) {
@@ -91,7 +94,12 @@ export async function getClient<T>(
   }
 
   // Determine region
-  const region = options.region || account?.regions[0] || config?.aws.defaultRegion || process.env.AWS_REGION || 'us-east-1';
+  const region =
+    options.region ||
+    account?.regions[0] ||
+    config?.aws.defaultRegion ||
+    process.env.AWS_REGION ||
+    'us-east-1';
 
   // Cache key
   const cacheKey = `${ClientClass.name}:${account?.name || 'default'}:${region}`;

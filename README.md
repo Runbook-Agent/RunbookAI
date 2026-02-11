@@ -189,14 +189,17 @@ Available tools: `search_runbooks`, `get_known_issues`, `search_postmortems`, `g
 Save and resume investigation state across sessions:
 
 ```bash
-# List checkpoints
+# List checkpoints for an investigation
 runbook checkpoint list --investigation inv-12345
 
 # Show checkpoint details
-runbook checkpoint show --id abc123def456
+runbook checkpoint show abc123def456 --investigation inv-12345
 
-# Delete a checkpoint
-runbook checkpoint delete --id abc123def456
+# Delete a specific checkpoint
+runbook checkpoint delete abc123def456 --investigation inv-12345
+
+# Delete all checkpoints for an investigation
+runbook checkpoint delete --investigation inv-12345 --all
 ```
 
 See [docs/CLAUDE_INTEGRATION.md](./docs/CLAUDE_INTEGRATION.md) for full documentation.

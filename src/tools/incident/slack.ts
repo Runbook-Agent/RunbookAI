@@ -39,7 +39,7 @@ async function slackFetch<T>(method: string, body: Record<string, unknown>): Pro
     body: JSON.stringify(body),
   });
 
-  const data = await response.json() as { ok: boolean; error?: string } & T;
+  const data = (await response.json()) as { ok: boolean; error?: string } & T;
 
   if (!data.ok) {
     throw new Error(`Slack API error: ${data.error}`);
@@ -186,7 +186,12 @@ export async function postInvestigationUpdate(
   if (update.hypotheses && update.hypotheses.length > 0) {
     const hypothesisList = update.hypotheses
       .map((h) => {
-        const icon = h.status === 'confirmed' ? ':white_check_mark:' : h.status === 'pruned' ? ':x:' : ':thinking_face:';
+        const icon =
+          h.status === 'confirmed'
+            ? ':white_check_mark:'
+            : h.status === 'pruned'
+              ? ':x:'
+              : ':thinking_face:';
         return `${icon} ${h.statement}`;
       })
       .join('\n');
@@ -446,10 +451,14 @@ export async function requestSlackApproval(
     ],
   });
 
-  return postMessage(channel, `Approval requested for ${request.operation} on ${request.resource}`, {
-    blocks,
-    attachments: [{ color: riskColor[request.riskLevel], fallback: request.description }],
-  });
+  return postMessage(
+    channel,
+    `Approval requested for ${request.operation} on ${request.resource}`,
+    {
+      blocks,
+      attachments: [{ color: riskColor[request.riskLevel], fallback: request.description }],
+    }
+  );
 }
 
 /**

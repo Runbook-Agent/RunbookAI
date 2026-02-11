@@ -5,7 +5,12 @@
  * context during investigations based on service dependencies.
  */
 
-import type { ServiceGraph, ServiceNode, ImpactPath, DependencyEdge } from '../knowledge/store/graph-store';
+import type {
+  ServiceGraph,
+  ServiceNode,
+  ImpactPath,
+  DependencyEdge,
+} from '../knowledge/store/graph-store';
 import type { RetrievedChunk, ServiceOwnership } from '../knowledge/types';
 import type { KnowledgeContextManager } from './knowledge-context';
 
@@ -151,21 +156,21 @@ export class ServiceContextManager {
 
       // Find runbooks for this service
       for (const rb of knowledgeContext.relevantRunbooks) {
-        if (rb.services.some(s => s.toLowerCase().includes(service.name.toLowerCase()))) {
+        if (rb.services.some((s) => s.toLowerCase().includes(service.name.toLowerCase()))) {
           runbooks.push(rb);
         }
       }
 
       // Find known issues
       for (const ki of knowledgeContext.matchingKnownIssues) {
-        if (ki.services.some(s => s.toLowerCase().includes(service.name.toLowerCase()))) {
+        if (ki.services.some((s) => s.toLowerCase().includes(service.name.toLowerCase()))) {
           knownIssues.push(ki);
         }
       }
 
       // Find postmortems (recent incidents)
       for (const pm of knowledgeContext.relevantPostmortems) {
-        if (pm.services.some(s => s.toLowerCase().includes(service.name.toLowerCase()))) {
+        if (pm.services.some((s) => s.toLowerCase().includes(service.name.toLowerCase()))) {
           recentIncidents.push(pm);
         }
       }
@@ -175,8 +180,8 @@ export class ServiceContextManager {
         for (const dep of criticalDependencies.slice(0, 3)) {
           for (const rb of knowledgeContext.relevantRunbooks) {
             if (
-              rb.services.some(s => s.toLowerCase().includes(dep.name.toLowerCase())) &&
-              !runbooks.some(r => r.id === rb.id)
+              rb.services.some((s) => s.toLowerCase().includes(dep.name.toLowerCase())) &&
+              !runbooks.some((r) => r.id === rb.id)
             ) {
               runbooks.push(rb);
             }
@@ -231,14 +236,14 @@ export class ServiceContextManager {
       for (const dep of dependencies) {
         // Prioritize critical and database dependencies
         if (dep.type === 'database' || dep.type === 'cache' || dep.tier === 'critical') {
-          if (!causes.some(c => c.id === dep.id)) {
+          if (!causes.some((c) => c.id === dep.id)) {
             causes.push(dep);
           }
         }
 
         const edge = this.graph.getDependency(current, dep.id);
         if (edge && edge.criticality !== 'optional') {
-          if (!causes.some(c => c.id === dep.id)) {
+          if (!causes.some((c) => c.id === dep.id)) {
             causes.push(dep);
           }
         }
@@ -387,7 +392,9 @@ export class ServiceContextManager {
 
       // Dependencies
       if (context.criticalDependencies.length > 0) {
-        sections.push(`Critical dependencies: ${context.criticalDependencies.map(d => d.name).join(', ')}`);
+        sections.push(
+          `Critical dependencies: ${context.criticalDependencies.map((d) => d.name).join(', ')}`
+        );
       }
 
       // Blast radius
@@ -395,14 +402,14 @@ export class ServiceContextManager {
         sections.push(`Blast radius: ${context.blastRadius.totalAffected} service(s) affected`);
         if (context.blastRadius.criticalServicesAffected.length > 0) {
           sections.push(
-            `Critical services at risk: ${context.blastRadius.criticalServicesAffected.map(s => s.name).join(', ')}`
+            `Critical services at risk: ${context.blastRadius.criticalServicesAffected.map((s) => s.name).join(', ')}`
           );
         }
       }
 
       // Runbooks available
       if (context.runbooks.length > 0) {
-        sections.push(`Available runbooks: ${context.runbooks.map(r => r.title).join(', ')}`);
+        sections.push(`Available runbooks: ${context.runbooks.map((r) => r.title).join(', ')}`);
       }
 
       // Known issues
@@ -486,8 +493,8 @@ export class ServiceContextManager {
   isInBlastRadius(serviceName: string): boolean {
     for (const context of this.contextCache.values()) {
       if (
-        context.blastRadius.directDependents.some(d => d.name === serviceName) ||
-        context.blastRadius.transitiveDependents.some(d => d.name === serviceName)
+        context.blastRadius.directDependents.some((d) => d.name === serviceName) ||
+        context.blastRadius.transitiveDependents.some((d) => d.name === serviceName)
       ) {
         return true;
       }

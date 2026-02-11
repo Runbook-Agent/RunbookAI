@@ -75,11 +75,7 @@ function parseAlignments(line: string): Array<'left' | 'center' | 'right' | null
 /**
  * Render a table with box-drawing characters
  */
-export function MarkdownTable({
-  headers,
-  rows,
-  alignments = [],
-}: TableProps): React.ReactElement {
+export function MarkdownTable({ headers, rows, alignments = [] }: TableProps): React.ReactElement {
   // Create table with box-drawing characters
   const table = new Table({
     head: headers,

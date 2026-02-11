@@ -223,10 +223,7 @@ describe('extractServiceMentions', () => {
   });
 
   it('should extract from service= pattern', () => {
-    const logs = [
-      'service=api-gateway status=error',
-      'service="user-service" latency=500',
-    ];
+    const logs = ['service=api-gateway status=error', 'service="user-service" latency=500'];
 
     const result = extractServiceMentions(logs);
 
@@ -291,9 +288,30 @@ describe('countByLevel', () => {
 describe('generateHypothesesFromPatterns', () => {
   it('should generate unique hypotheses from matches', () => {
     const matches = [
-      { patternName: 'connectionTimeout', hypothesis: 'Network issue', matchCount: 5, category: 'connectivity', severity: 'error' as const, examples: [] },
-      { patternName: 'databaseError', hypothesis: 'Database issue', matchCount: 3, category: 'database', severity: 'error' as const, examples: [] },
-      { patternName: 'connectionRefused', hypothesis: 'Network issue', matchCount: 2, category: 'connectivity', severity: 'error' as const, examples: [] },
+      {
+        patternName: 'connectionTimeout',
+        hypothesis: 'Network issue',
+        matchCount: 5,
+        category: 'connectivity',
+        severity: 'error' as const,
+        examples: [],
+      },
+      {
+        patternName: 'databaseError',
+        hypothesis: 'Database issue',
+        matchCount: 3,
+        category: 'database',
+        severity: 'error' as const,
+        examples: [],
+      },
+      {
+        patternName: 'connectionRefused',
+        hypothesis: 'Network issue',
+        matchCount: 2,
+        category: 'connectivity',
+        severity: 'error' as const,
+        examples: [],
+      },
     ];
 
     const result = generateHypothesesFromPatterns(matches);
@@ -311,15 +329,32 @@ describe('generateSummary', () => {
       errorCount: 50,
       warningCount: 100,
       patternMatches: [
-        { patternName: 'outOfMemory', category: 'resources', severity: 'critical', hypothesis: 'Memory', matchCount: 10, examples: [] },
-        { patternName: 'connectionTimeout', category: 'connectivity', severity: 'error', hypothesis: 'Network', matchCount: 20, examples: [] },
+        {
+          patternName: 'outOfMemory',
+          category: 'resources',
+          severity: 'critical',
+          hypothesis: 'Memory',
+          matchCount: 10,
+          examples: [],
+        },
+        {
+          patternName: 'connectionTimeout',
+          category: 'connectivity',
+          severity: 'error',
+          hypothesis: 'Network',
+          matchCount: 20,
+          examples: [],
+        },
       ],
       suggestedHypotheses: [],
       timeRange: {
         start: new Date('2024-01-15T10:00:00Z'),
         end: new Date('2024-01-15T11:00:00Z'),
       },
-      serviceMentions: new Map([['api-gateway', 50], ['user-service', 30]]),
+      serviceMentions: new Map([
+        ['api-gateway', 50],
+        ['user-service', 30],
+      ]),
     });
 
     expect(result).toContain('1000 log lines');
@@ -422,11 +457,7 @@ describe('filterLogsByLevel', () => {
 
 describe('searchLogs', () => {
   it('should search with string query', () => {
-    const logs = [
-      'ERROR connection timeout',
-      'INFO request completed',
-      'ERROR connection refused',
-    ];
+    const logs = ['ERROR connection timeout', 'INFO request completed', 'ERROR connection refused'];
 
     const result = searchLogs(logs, 'connection');
 
@@ -464,7 +495,9 @@ describe('ERROR_PATTERNS', () => {
   it('should have hypothesis for each pattern', () => {
     for (const [name, pattern] of Object.entries(ERROR_PATTERNS)) {
       expect(pattern.hypothesis, `${name} should have hypothesis`).toBeDefined();
-      expect(pattern.hypothesis.length, `${name} hypothesis should not be empty`).toBeGreaterThan(0);
+      expect(pattern.hypothesis.length, `${name} hypothesis should not be empty`).toBeGreaterThan(
+        0
+      );
     }
   });
 });

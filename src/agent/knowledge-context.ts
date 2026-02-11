@@ -152,11 +152,12 @@ export class KnowledgeContextManager {
     // Build lightweight index
     const runbooks: RunbookIndexEntry[] = [];
     const knownIssues: KnownIssueIndexEntry[] = [];
-    const postmortems: Array<{ id: string; title: string; services: string[]; rootCause: string }> = [];
+    const postmortems: Array<{ id: string; title: string; services: string[]; rootCause: string }> =
+      [];
 
     for (const chunk of allKnowledge.runbooks) {
       // Dedupe by document ID
-      if (!runbooks.some(r => r.id === chunk.documentId)) {
+      if (!runbooks.some((r) => r.id === chunk.documentId)) {
         runbooks.push({
           id: chunk.documentId,
           title: chunk.title,
@@ -167,7 +168,7 @@ export class KnowledgeContextManager {
     }
 
     for (const chunk of allKnowledge.knownIssues) {
-      if (!knownIssues.some(k => k.id === chunk.documentId)) {
+      if (!knownIssues.some((k) => k.id === chunk.documentId)) {
         const symptoms = this.extractSymptoms(chunk.content);
         knownIssues.push({
           id: chunk.documentId,
@@ -180,7 +181,7 @@ export class KnowledgeContextManager {
     }
 
     for (const chunk of allKnowledge.postmortems) {
-      if (!postmortems.some(p => p.id === chunk.documentId)) {
+      if (!postmortems.some((p) => p.id === chunk.documentId)) {
         postmortems.push({
           id: chunk.documentId,
           title: chunk.title,
@@ -192,7 +193,7 @@ export class KnowledgeContextManager {
 
     this.context.index = {
       runbooks,
-      activeKnownIssues: knownIssues.filter(k => !k.resolved),
+      activeKnownIssues: knownIssues.filter((k) => !k.resolved),
       postmortems,
       lastRefreshed: new Date().toISOString(),
     };
@@ -255,7 +256,7 @@ export class KnowledgeContextManager {
    */
   async queryForNewServices(services: string[]): Promise<RetrievedKnowledge | null> {
     // Filter to only services not yet queried
-    const newServices = services.filter(s => !this.context.queriedServices.has(s));
+    const newServices = services.filter((s) => !this.context.queriedServices.has(s));
     if (newServices.length === 0) {
       return null;
     }
@@ -280,7 +281,7 @@ export class KnowledgeContextManager {
    */
   async queryForNewSymptoms(symptoms: string[]): Promise<RetrievedChunk[]> {
     // Filter to only symptoms not yet queried
-    const newSymptoms = symptoms.filter(s => !this.context.queriedSymptoms.has(s));
+    const newSymptoms = symptoms.filter((s) => !this.context.queriedSymptoms.has(s));
     if (newSymptoms.length === 0) {
       return [];
     }
@@ -295,7 +296,7 @@ export class KnowledgeContextManager {
     for (const chunk of knowledge.knownIssues) {
       if (
         chunk.score >= this.config.minRelevanceScore &&
-        !this.context.matchingKnownIssues.some(k => k.id === chunk.id)
+        !this.context.matchingKnownIssues.some((k) => k.id === chunk.id)
       ) {
         this.context.matchingKnownIssues.push(chunk);
       }
@@ -304,7 +305,10 @@ export class KnowledgeContextManager {
     // Trim to max
     if (this.context.matchingKnownIssues.length > this.config.maxKnownIssues) {
       this.context.matchingKnownIssues.sort((a, b) => b.score - a.score);
-      this.context.matchingKnownIssues = this.context.matchingKnownIssues.slice(0, this.config.maxKnownIssues);
+      this.context.matchingKnownIssues = this.context.matchingKnownIssues.slice(
+        0,
+        this.config.maxKnownIssues
+      );
     }
 
     // Track as queried
@@ -329,8 +333,8 @@ export class KnowledgeContextManager {
     matchedKnownIssues: RetrievedChunk[];
   }> {
     // Find newly discovered services and symptoms
-    const newServices = state.servicesDiscovered.filter(s => !previousServices.includes(s));
-    const newSymptoms = state.symptomsIdentified.filter(s => !previousSymptoms.includes(s));
+    const newServices = state.servicesDiscovered.filter((s) => !previousServices.includes(s));
+    const newSymptoms = state.symptomsIdentified.filter((s) => !previousSymptoms.includes(s));
 
     let newKnowledge: RetrievedKnowledge | null = null;
     let matchedKnownIssues: RetrievedChunk[] = [];
@@ -361,7 +365,7 @@ export class KnowledgeContextManager {
     for (const chunk of knowledge.runbooks) {
       if (
         chunk.score >= this.config.minRelevanceScore &&
-        !this.context.relevantRunbooks.some(r => r.id === chunk.id)
+        !this.context.relevantRunbooks.some((r) => r.id === chunk.id)
       ) {
         this.context.relevantRunbooks.push(chunk);
       }
@@ -371,7 +375,7 @@ export class KnowledgeContextManager {
     for (const chunk of knowledge.postmortems) {
       if (
         chunk.score >= this.config.minRelevanceScore &&
-        !this.context.relevantPostmortems.some(p => p.id === chunk.id)
+        !this.context.relevantPostmortems.some((p) => p.id === chunk.id)
       ) {
         this.context.relevantPostmortems.push(chunk);
       }
@@ -381,7 +385,7 @@ export class KnowledgeContextManager {
     for (const chunk of knowledge.architecture) {
       if (
         chunk.score >= this.config.minRelevanceScore &&
-        !this.context.relevantArchitecture.some(a => a.id === chunk.id)
+        !this.context.relevantArchitecture.some((a) => a.id === chunk.id)
       ) {
         this.context.relevantArchitecture.push(chunk);
       }
@@ -391,7 +395,7 @@ export class KnowledgeContextManager {
     for (const chunk of knowledge.knownIssues) {
       if (
         chunk.score >= this.config.minRelevanceScore &&
-        !this.context.matchingKnownIssues.some(k => k.id === chunk.id)
+        !this.context.matchingKnownIssues.some((k) => k.id === chunk.id)
       ) {
         this.context.matchingKnownIssues.push(chunk);
       }
@@ -417,10 +421,22 @@ export class KnowledgeContextManager {
       return arr.slice(0, max);
     };
 
-    this.context.relevantRunbooks = sortAndTrim(this.context.relevantRunbooks, this.config.maxRunbooks);
-    this.context.relevantPostmortems = sortAndTrim(this.context.relevantPostmortems, this.config.maxPostmortems);
-    this.context.relevantArchitecture = sortAndTrim(this.context.relevantArchitecture, this.config.maxArchitecture);
-    this.context.matchingKnownIssues = sortAndTrim(this.context.matchingKnownIssues, this.config.maxKnownIssues);
+    this.context.relevantRunbooks = sortAndTrim(
+      this.context.relevantRunbooks,
+      this.config.maxRunbooks
+    );
+    this.context.relevantPostmortems = sortAndTrim(
+      this.context.relevantPostmortems,
+      this.config.maxPostmortems
+    );
+    this.context.relevantArchitecture = sortAndTrim(
+      this.context.relevantArchitecture,
+      this.config.maxArchitecture
+    );
+    this.context.matchingKnownIssues = sortAndTrim(
+      this.context.matchingKnownIssues,
+      this.config.maxKnownIssues
+    );
   }
 
   /**
@@ -451,7 +467,9 @@ export class KnowledgeContextManager {
         }
       }
       if (serviceToRunbooks.size > 0) {
-        sections.push('Services with runbooks: ' + Array.from(serviceToRunbooks.keys()).slice(0, 10).join(', '));
+        sections.push(
+          'Services with runbooks: ' + Array.from(serviceToRunbooks.keys()).slice(0, 10).join(', ')
+        );
       }
     }
 
@@ -519,11 +537,13 @@ export class KnowledgeContextManager {
     const parts: string[] = [];
 
     if (this.context.relevantRunbooks.length > 0) {
-      parts.push(`Runbooks: ${this.context.relevantRunbooks.map(r => r.title).join(', ')}`);
+      parts.push(`Runbooks: ${this.context.relevantRunbooks.map((r) => r.title).join(', ')}`);
     }
 
     if (this.context.matchingKnownIssues.length > 0) {
-      parts.push(`Known Issues: ${this.context.matchingKnownIssues.map(k => k.title).join(', ')}`);
+      parts.push(
+        `Known Issues: ${this.context.matchingKnownIssues.map((k) => k.title).join(', ')}`
+      );
     }
 
     if (this.context.relevantPostmortems.length > 0) {
@@ -538,8 +558,8 @@ export class KnowledgeContextManager {
    */
   hasRunbookForService(serviceName: string): boolean {
     const lowerName = serviceName.toLowerCase();
-    return this.context.index.runbooks.some(r =>
-      r.services.some(s => s.toLowerCase().includes(lowerName))
+    return this.context.index.runbooks.some((r) =>
+      r.services.some((s) => s.toLowerCase().includes(lowerName))
     );
   }
 
@@ -554,7 +574,7 @@ export class KnowledgeContextManager {
       }
     }
 
-    return Array.from(servicesWithRunbooks).filter(s => !this.context.queriedServices.has(s));
+    return Array.from(servicesWithRunbooks).filter((s) => !this.context.queriedServices.has(s));
   }
 
   /**
@@ -568,8 +588,8 @@ export class KnowledgeContextManager {
    * Find known issues matching symptoms.
    */
   findMatchingKnownIssues(symptoms: string[]): KnownIssueIndexEntry[] {
-    const symptomsLower = symptoms.map(s => s.toLowerCase());
-    return this.context.index.activeKnownIssues.filter(issue => {
+    const symptomsLower = symptoms.map((s) => s.toLowerCase());
+    return this.context.index.activeKnownIssues.filter((issue) => {
       for (const issueSymptom of issue.symptoms) {
         const issueLower = issueSymptom.toLowerCase();
         for (const symptom of symptomsLower) {

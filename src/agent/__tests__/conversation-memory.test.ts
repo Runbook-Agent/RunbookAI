@@ -247,7 +247,14 @@ describe('ConversationMemory', () => {
 
     it('should include investigation context', () => {
       memory.addInvestigation(
-        { id: 'inv_1', query: 'API slowness', rootCause: 'DB pool exhausted', confidence: 'high', summary: '', durationMs: 0 },
+        {
+          id: 'inv_1',
+          query: 'API slowness',
+          rootCause: 'DB pool exhausted',
+          confidence: 'high',
+          summary: '',
+          durationMs: 0,
+        },
         {
           hypotheses: [],
           conclusion: {
@@ -270,7 +277,9 @@ describe('ConversationMemory', () => {
     it('should respect token limit', () => {
       // Add many messages
       for (let i = 0; i < 100; i++) {
-        memory.addUserMessage(`This is message number ${i} with some extra content to make it longer`);
+        memory.addUserMessage(
+          `This is message number ${i} with some extra content to make it longer`
+        );
       }
 
       const context = memory.getContextForPrompt(1000);
@@ -295,7 +304,14 @@ describe('ConversationMemory', () => {
 
     it('should include investigation summary', () => {
       memory.addInvestigation(
-        { id: 'inv_1', query: 'Test query', rootCause: 'Test cause', confidence: 'high', summary: '', durationMs: 0 },
+        {
+          id: 'inv_1',
+          query: 'Test query',
+          rootCause: 'Test cause',
+          confidence: 'high',
+          summary: '',
+          durationMs: 0,
+        },
         {
           hypotheses: [],
           conclusion: {
@@ -319,7 +335,14 @@ describe('ConversationMemory', () => {
   describe('references', () => {
     it('should get reference for previous investigation', () => {
       memory.addInvestigation(
-        { id: 'inv_1', query: 'API performance issue', rootCause: 'Memory leak', confidence: 'high', summary: '', durationMs: 0 },
+        {
+          id: 'inv_1',
+          query: 'API performance issue',
+          rootCause: 'Memory leak',
+          confidence: 'high',
+          summary: '',
+          durationMs: 0,
+        },
         {
           hypotheses: [],
           conclusion: {

@@ -450,7 +450,9 @@ export class KubernetesClient {
       args.push('--previous');
     }
 
-    const config = options.namespace ? { ...this.config, namespace: options.namespace } : this.config;
+    const config = options.namespace
+      ? { ...this.config, namespace: options.namespace }
+      : this.config;
     const result = await kubectl(args, config);
 
     return result.stdout;
@@ -459,7 +461,11 @@ export class KubernetesClient {
   /**
    * Describe a resource
    */
-  async describe(resourceType: KubernetesResourceType, name: string, namespace?: string): Promise<string> {
+  async describe(
+    resourceType: KubernetesResourceType,
+    name: string,
+    namespace?: string
+  ): Promise<string> {
     const config = namespace ? { ...this.config, namespace } : this.config;
     const result = await kubectl(['describe', resourceType, name], config);
     return result.stdout || result.stderr;
@@ -559,10 +565,7 @@ export class KubernetesClient {
   /**
    * Get rollout history
    */
-  async getRolloutHistory(
-    name: string,
-    namespace?: string
-  ): Promise<string> {
+  async getRolloutHistory(name: string, namespace?: string): Promise<string> {
     const config = namespace ? { ...this.config, namespace } : this.config;
     const result = await kubectl(['rollout', 'history', 'deployment', name], config);
     return result.stdout;
@@ -606,7 +609,9 @@ export class KubernetesClient {
 
     args.push(...command);
 
-    const config = options.namespace ? { ...this.config, namespace: options.namespace } : this.config;
+    const config = options.namespace
+      ? { ...this.config, namespace: options.namespace }
+      : this.config;
     return kubectl(args, config);
   }
 
@@ -615,36 +620,38 @@ export class KubernetesClient {
    */
   async apply(manifest: string): Promise<{ success: boolean; message: string }> {
     const args = ['apply', '-f', '-'];
-    const result = await new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
-      const cmdArgs = [...args];
+    const result = await new Promise<{ stdout: string; stderr: string; exitCode: number }>(
+      (resolve) => {
+        const cmdArgs = [...args];
 
-      if (this.config.context) {
-        cmdArgs.unshift('--context', this.config.context);
+        if (this.config.context) {
+          cmdArgs.unshift('--context', this.config.context);
+        }
+
+        const proc = spawn('kubectl', cmdArgs, {
+          env: process.env,
+          shell: false,
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        proc.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        proc.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        proc.on('close', (exitCode) => {
+          resolve({ stdout, stderr, exitCode: exitCode || 0 });
+        });
+
+        proc.stdin.write(manifest);
+        proc.stdin.end();
       }
-
-      const proc = spawn('kubectl', cmdArgs, {
-        env: process.env,
-        shell: false,
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      proc.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      proc.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (exitCode) => {
-        resolve({ stdout, stderr, exitCode: exitCode || 0 });
-      });
-
-      proc.stdin.write(manifest);
-      proc.stdin.end();
-    });
+    );
 
     return {
       success: result.exitCode === 0,
@@ -668,7 +675,9 @@ export class KubernetesClient {
     }
 
     const version = parseKubectlJson<K8sVersion>(versionResult.stdout);
-    const serverMatch = infoResult.stdout.match(/Kubernetes (?:control plane|master) is running at (https?:\/\/[^\s]+)/);
+    const serverMatch = infoResult.stdout.match(
+      /Kubernetes (?:control plane|master) is running at (https?:\/\/[^\s]+)/
+    );
 
     return {
       server: serverMatch?.[1] || 'unknown',
@@ -679,7 +688,9 @@ export class KubernetesClient {
   /**
    * Get top pods (resource usage)
    */
-  async getTopPods(namespace?: string): Promise<Array<{ name: string; cpu: string; memory: string }>> {
+  async getTopPods(
+    namespace?: string
+  ): Promise<Array<{ name: string; cpu: string; memory: string }>> {
     const config = namespace ? { ...this.config, namespace } : this.config;
     const result = await kubectl(['top', 'pods', '--no-headers'], config);
 

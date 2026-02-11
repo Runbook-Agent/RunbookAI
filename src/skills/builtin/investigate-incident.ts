@@ -9,7 +9,8 @@ import type { SkillDefinition } from '../types';
 export const investigateIncidentSkill: SkillDefinition = {
   id: 'investigate-incident',
   name: 'Investigate Incident',
-  description: 'Perform a hypothesis-driven investigation of an incident using the Bits AI methodology',
+  description:
+    'Perform a hypothesis-driven investigation of an incident using the Bits AI methodology',
   version: '1.0.0',
   tags: ['incident', 'investigation', 'debugging'],
   riskLevel: 'low',

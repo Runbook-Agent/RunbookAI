@@ -311,7 +311,46 @@ export class CheckpointStore {
     }
 
     await unlink(checkpointPath);
+
+    // Update latest.json if we deleted the latest checkpoint
+    await this.updateLatestAfterDelete(investigationId, checkpointId);
+
     return true;
+  }
+
+  /**
+   * Update latest.json after deleting a checkpoint
+   */
+  private async updateLatestAfterDelete(
+    investigationId: string,
+    deletedCheckpointId: CheckpointId
+  ): Promise<void> {
+    const latestPath = this.getLatestPath(investigationId);
+    if (!existsSync(latestPath)) {
+      return;
+    }
+
+    try {
+      const latestContent = await readFile(latestPath, 'utf-8');
+      const latest = JSON.parse(latestContent) as InvestigationCheckpoint;
+
+      if (latest.id === deletedCheckpointId) {
+        // Get remaining checkpoints and update latest to the most recent one
+        const remaining = await this.list(investigationId);
+        if (remaining.length === 0) {
+          // No more checkpoints, remove latest.json
+          await unlink(latestPath);
+        } else {
+          // Update to the new most recent checkpoint
+          const newLatest = await this.load(investigationId, remaining[0].id);
+          if (newLatest) {
+            await writeFile(latestPath, JSON.stringify(newLatest, null, 2), 'utf-8');
+          }
+        }
+      }
+    } catch {
+      // Ignore errors reading/updating latest.json
+    }
   }
 
   /**

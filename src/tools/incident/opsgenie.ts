@@ -93,12 +93,14 @@ export async function getAlert(alertId: string): Promise<OpsGenieAlert> {
 /**
  * List alerts with optional filters
  */
-export async function listAlerts(options: {
-  query?: string;
-  status?: 'open' | 'closed' | 'acked';
-  limit?: number;
-  order?: 'asc' | 'desc';
-} = {}): Promise<OpsGenieAlert[]> {
+export async function listAlerts(
+  options: {
+    query?: string;
+    status?: 'open' | 'closed' | 'acked';
+    limit?: number;
+    order?: 'asc' | 'desc';
+  } = {}
+): Promise<OpsGenieAlert[]> {
   const params = new URLSearchParams();
 
   if (options.query) params.set('query', options.query);
@@ -131,12 +133,14 @@ export async function getIncident(incidentId: string): Promise<OpsGenieIncident>
 /**
  * List incidents with optional filters
  */
-export async function listIncidents(options: {
-  query?: string;
-  status?: 'open' | 'resolved';
-  limit?: number;
-  order?: 'asc' | 'desc';
-} = {}): Promise<OpsGenieIncident[]> {
+export async function listIncidents(
+  options: {
+    query?: string;
+    status?: 'open' | 'resolved';
+    limit?: number;
+    order?: 'asc' | 'desc';
+  } = {}
+): Promise<OpsGenieIncident[]> {
   const params = new URLSearchParams();
 
   if (options.query) params.set('query', options.query);
@@ -171,10 +175,7 @@ export async function acknowledgeAlert(
 /**
  * Close an alert
  */
-export async function closeAlert(
-  alertId: string,
-  note?: string
-): Promise<{ requestId: string }> {
+export async function closeAlert(alertId: string, note?: string): Promise<{ requestId: string }> {
   const response = await ogFetch<{ requestId: string }>(`/alerts/${alertId}/close`, {
     method: 'POST',
     body: JSON.stringify({
@@ -188,10 +189,7 @@ export async function closeAlert(
 /**
  * Add note to alert
  */
-export async function addAlertNote(
-  alertId: string,
-  note: string
-): Promise<{ requestId: string }> {
+export async function addAlertNote(alertId: string, note: string): Promise<{ requestId: string }> {
   const response = await ogFetch<{ requestId: string }>(`/alerts/${alertId}/notes`, {
     method: 'POST',
     body: JSON.stringify({
@@ -205,12 +203,14 @@ export async function addAlertNote(
 /**
  * Get alert notes
  */
-export async function getAlertNotes(alertId: string): Promise<Array<{
-  id: string;
-  note: string;
-  createdAt: string;
-  owner: string;
-}>> {
+export async function getAlertNotes(alertId: string): Promise<
+  Array<{
+    id: string;
+    note: string;
+    createdAt: string;
+    owner: string;
+  }>
+> {
   const response = await ogFetch<{ data: Array<Record<string, unknown>> }>(
     `/alerts/${alertId}/notes`
   );
@@ -260,12 +260,14 @@ export async function addIncidentNote(
 /**
  * Get incident timeline
  */
-export async function getIncidentTimeline(incidentId: string): Promise<Array<{
-  id: string;
-  type: string;
-  description: string;
-  createdAt: string;
-}>> {
+export async function getIncidentTimeline(incidentId: string): Promise<
+  Array<{
+    id: string;
+    type: string;
+    description: string;
+    createdAt: string;
+  }>
+> {
   const response = await ogFetch<{ data: Array<Record<string, unknown>> }>(
     `/incidents/${incidentId}/timeline`
   );

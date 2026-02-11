@@ -358,17 +358,14 @@ export class Scratchpad {
    * Get all result IDs.
    */
   getResultIds(): string[] {
-    return [
-      ...Array.from(this.tieredResults.keys()),
-      ...Array.from(this.archivedResults.keys()),
-    ];
+    return [...Array.from(this.tieredResults.keys()), ...Array.from(this.archivedResults.keys())];
   }
 
   /**
    * Get tiered tool results by tier.
    */
   getResultsByTier(tier: StorageTier): TieredToolResult[] {
-    return Array.from(this.tieredResults.values()).filter(r => r.tier === tier);
+    return Array.from(this.tieredResults.values()).filter((r) => r.tier === tier);
   }
 
   /**
@@ -412,9 +409,10 @@ export class Scratchpad {
       for (const result of fullResults) {
         sections.push(`### ${result.tool} [${result.resultId}]`);
         sections.push(`Args: ${JSON.stringify(result.args)}`);
-        const resultStr = typeof result.result === 'string'
-          ? result.result
-          : JSON.stringify(result.result, null, 2);
+        const resultStr =
+          typeof result.result === 'string'
+            ? result.result
+            : JSON.stringify(result.result, null, 2);
         sections.push(resultStr.slice(0, 3000)); // Limit size per result
         sections.push('');
       }
@@ -430,9 +428,10 @@ export class Scratchpad {
             sections.push(`  Services: ${result.compact.services.slice(0, 5).join(', ')}`);
           }
         } else {
-          const preview = typeof result.result === 'string'
-            ? result.result.slice(0, 100)
-            : JSON.stringify(result.result).slice(0, 100);
+          const preview =
+            typeof result.result === 'string'
+              ? result.result.slice(0, 100)
+              : JSON.stringify(result.result).slice(0, 100);
           sections.push(`- [${result.resultId}] ${result.tool}: ${preview}...`);
         }
       }
@@ -440,7 +439,9 @@ export class Scratchpad {
 
     // Note about cleared results
     if (clearedCount > 0) {
-      sections.push(`\n_${clearedCount} older result(s) cleared. Use get_full_result with result ID to retrieve._`);
+      sections.push(
+        `\n_${clearedCount} older result(s) cleared. Use get_full_result with result ID to retrieve._`
+      );
     }
 
     return sections.join('\n');

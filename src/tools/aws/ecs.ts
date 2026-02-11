@@ -90,7 +90,11 @@ export async function describeServices(
   }));
 }
 
-export async function listTasks(clusterArn: string, serviceName?: string, region?: string): Promise<string[]> {
+export async function listTasks(
+  clusterArn: string,
+  serviceName?: string,
+  region?: string
+): Promise<string[]> {
   const ecs = getClient(region);
   const command = new ListTasksCommand({
     cluster: clusterArn,
@@ -100,7 +104,11 @@ export async function listTasks(clusterArn: string, serviceName?: string, region
   return response.taskArns || [];
 }
 
-export async function describeTasks(clusterArn: string, taskArns: string[], region?: string): Promise<ECSTask[]> {
+export async function describeTasks(
+  clusterArn: string,
+  taskArns: string[],
+  region?: string
+): Promise<ECSTask[]> {
   if (taskArns.length === 0) return [];
 
   const ecs = getClient(region);

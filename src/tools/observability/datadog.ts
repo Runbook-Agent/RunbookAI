@@ -130,10 +130,7 @@ export async function queryMetrics(
 /**
  * Get active metrics list
  */
-export async function listActiveMetrics(
-  from?: number,
-  host?: string
-): Promise<string[]> {
+export async function listActiveMetrics(from?: number, host?: string): Promise<string[]> {
   const config = await getDatadogConfig();
   if (!config) {
     return [];
@@ -147,10 +144,7 @@ export async function listActiveMetrics(
     params.set('host', host);
   }
 
-  const result = await datadogRequest<{ metrics: string[] }>(
-    config,
-    `/api/v1/metrics?${params}`
-  );
+  const result = await datadogRequest<{ metrics: string[] }>(config, `/api/v1/metrics?${params}`);
 
   return result.metrics || [];
 }
@@ -375,18 +369,20 @@ export async function listMonitors(
     params.set('monitor_tags', options.tags.join(','));
   }
 
-  const result = await datadogRequest<Array<{
-    id: number;
-    name: string;
-    type: string;
-    query: string;
-    message: string;
-    overall_state: string;
-    tags: string[];
-    priority?: number;
-    created: string;
-    modified: string;
-  }>>(config, `/api/v1/monitor?${params}`);
+  const result = await datadogRequest<
+    Array<{
+      id: number;
+      name: string;
+      type: string;
+      query: string;
+      message: string;
+      overall_state: string;
+      tags: string[];
+      priority?: number;
+      created: string;
+      modified: string;
+    }>
+  >(config, `/api/v1/monitor?${params}`);
 
   return (result || []).map((m) => ({
     id: m.id,

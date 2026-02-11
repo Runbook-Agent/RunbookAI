@@ -25,7 +25,17 @@ export interface AWSServiceDefinition {
   id: string;
   name: string;
   description: string;
-  category: 'compute' | 'database' | 'storage' | 'networking' | 'security' | 'analytics' | 'integration' | 'devtools' | 'ml' | 'management';
+  category:
+    | 'compute'
+    | 'database'
+    | 'storage'
+    | 'networking'
+    | 'security'
+    | 'analytics'
+    | 'integration'
+    | 'devtools'
+    | 'ml'
+    | 'management';
   sdkPackage: string;
   clientClass: string;
   // Primary list operation to discover resources
@@ -33,12 +43,14 @@ export interface AWSServiceDefinition {
   // Describe operation to get details
   describeOperation?: AWSOperation;
   // Secondary operations that require parameters from primary resources
-  secondaryOperations?: Array<AWSOperation & {
-    // Which field from the primary resource provides the required parameter
-    requiresParam: string;
-    // Name of the parameter in the command
-    paramName: string;
-  }>;
+  secondaryOperations?: Array<
+    AWSOperation & {
+      // Which field from the primary resource provides the required parameter
+      requiresParam: string;
+      // Name of the parameter in the command
+      paramName: string;
+    }
+  >;
   // How to format each resource for display
   resourceFormatter: {
     idField: string;
@@ -168,7 +180,11 @@ export const AWS_SERVICES: AWSServiceDefinition[] = [
       description: 'List App Runner services',
       command: 'ListServicesCommand',
       resultPath: 'ServiceSummaryList',
-      pagination: { tokenParam: 'NextToken', tokenPath: 'NextToken', resultsPath: 'ServiceSummaryList' },
+      pagination: {
+        tokenParam: 'NextToken',
+        tokenPath: 'NextToken',
+        resultsPath: 'ServiceSummaryList',
+      },
     },
     resourceFormatter: {
       idField: 'ServiceArn',
@@ -209,7 +225,11 @@ export const AWS_SERVICES: AWSServiceDefinition[] = [
         requiresParam: 'appId',
         paramName: 'appId',
         // Note: also requires branchName, which we'll need to handle specially
-        pagination: { tokenParam: 'nextToken', tokenPath: 'nextToken', resultsPath: 'jobSummaries' },
+        pagination: {
+          tokenParam: 'nextToken',
+          tokenPath: 'nextToken',
+          resultsPath: 'jobSummaries',
+        },
       },
     ],
     resourceFormatter: {
@@ -298,7 +318,11 @@ export const AWS_SERVICES: AWSServiceDefinition[] = [
       description: 'List DynamoDB tables',
       command: 'ListTablesCommand',
       resultPath: 'TableNames',
-      pagination: { tokenParam: 'ExclusiveStartTableName', tokenPath: 'LastEvaluatedTableName', resultsPath: 'TableNames' },
+      pagination: {
+        tokenParam: 'ExclusiveStartTableName',
+        tokenPath: 'LastEvaluatedTableName',
+        resultsPath: 'TableNames',
+      },
     },
     resourceFormatter: {
       idField: 'TableName',
@@ -679,7 +703,11 @@ export const AWS_SERVICES: AWSServiceDefinition[] = [
       description: 'List certificates',
       command: 'ListCertificatesCommand',
       resultPath: 'CertificateSummaryList',
-      pagination: { tokenParam: 'NextToken', tokenPath: 'NextToken', resultsPath: 'CertificateSummaryList' },
+      pagination: {
+        tokenParam: 'NextToken',
+        tokenPath: 'NextToken',
+        resultsPath: 'CertificateSummaryList',
+      },
     },
     resourceFormatter: {
       idField: 'CertificateArn',
@@ -1074,7 +1102,9 @@ export function getServiceById(id: string): AWSServiceDefinition | undefined {
 /**
  * Get services by category
  */
-export function getServicesByCategory(category: AWSServiceDefinition['category']): AWSServiceDefinition[] {
+export function getServicesByCategory(
+  category: AWSServiceDefinition['category']
+): AWSServiceDefinition[] {
   return AWS_SERVICES.filter((s) => s.category === category);
 }
 

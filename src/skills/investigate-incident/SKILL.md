@@ -18,6 +18,7 @@ Perform a hypothesis-driven investigation of an incident to identify root cause.
 - [ ] Query for similar historical incidents
 
 **Tools to use:**
+
 - `pagerduty_get_incident` or `opsgenie_get_alert`
 - `search_knowledge` with type_filter: ['architecture', 'ownership']
 - `aws_query`: "list recent ECS deployments" or "recent Lambda updates"
@@ -26,14 +27,15 @@ Perform a hypothesis-driven investigation of an incident to identify root cause.
 
 Based on alert type and gathered context, generate 3-5 hypotheses.
 
-| Alert Pattern | Likely Hypotheses |
-|--------------|-------------------|
-| High error rate | Bad deploy, dependency failure, resource exhaustion |
-| High latency | Database slow, downstream timeout, CPU saturation |
-| Pod crashloop | OOM, missing config, bad image, init failure |
-| Connection timeout | Network issue, DNS, service down, connection pool |
+| Alert Pattern      | Likely Hypotheses                                   |
+| ------------------ | --------------------------------------------------- |
+| High error rate    | Bad deploy, dependency failure, resource exhaustion |
+| High latency       | Database slow, downstream timeout, CPU saturation   |
+| Pod crashloop      | OOM, missing config, bad image, init failure        |
+| Connection timeout | Network issue, DNS, service down, connection pool   |
 
 For each hypothesis, identify:
+
 - Key signals that would confirm it
 - Key signals that would refute it
 - Targeted query to gather evidence
@@ -43,6 +45,7 @@ For each hypothesis, identify:
 For each hypothesis, execute targeted queries. **Do NOT gather broad data.**
 
 For each result:
+
 - [ ] Classify evidence strength: STRONG / WEAK / NONE
 - [ ] Record reasoning
 - [ ] Update hypothesis status
@@ -72,6 +75,7 @@ For hypotheses with NONE evidence:
 ### Step 6: Confirm Root Cause
 
 When a hypothesis has:
+
 - Strong evidence at current or child level
 - No contradicting signals
 - Clear causal explanation
@@ -89,6 +93,7 @@ Mark it as confirmed and calculate confidence:
 - [ ] If no runbook, suggest remediation based on root cause type
 
 **Tools to use:**
+
 - `search_knowledge` with query matching root cause
 
 ### Step 8: Suggest Remediation
@@ -100,6 +105,7 @@ Based on root cause and any matching runbooks:
 - [ ] Long-term fixes (prevent recurrence)
 
 For any mutation:
+
 - Show exact command
 - Show rollback command
 - Request approval before execution
@@ -114,6 +120,7 @@ Post investigation summary to incident channel:
 - [ ] Timeline of investigation
 
 **Tools to use:**
+
 - `pagerduty_add_note` or `slack_post_update`
 
 ## Output Format
@@ -137,18 +144,20 @@ Post investigation summary to incident channel:
 
 ### Hypotheses Explored
 
-| Hypothesis | Evidence | Status |
-|------------|----------|--------|
-| {H1} | {STRONG/WEAK/NONE} | {Confirmed/Pruned} |
-| {H2} | {STRONG/WEAK/NONE} | {Confirmed/Pruned} |
+| Hypothesis | Evidence           | Status             |
+| ---------- | ------------------ | ------------------ |
+| {H1}       | {STRONG/WEAK/NONE} | {Confirmed/Pruned} |
+| {H2}       | {STRONG/WEAK/NONE} | {Confirmed/Pruned} |
 
 ### Remediation
 
 **Immediate:**
+
 - {Action 1}
 - {Action 2}
 
 **Long-term:**
+
 - {Action 1}
 - {Action 2}
 

@@ -1793,10 +1793,11 @@ claudeIntegration
       );
     }
 
-    // Always persist the event
+    // Always persist the event (pass input to avoid re-reading stdin)
     const persistResult = await handleClaudeHookStdin({
       projectDir: options.projectDir,
       storage,
+      input,
     });
 
     if (!persistResult.handled && persistResult.reason !== 'empty_stdin') {
@@ -2110,29 +2111,39 @@ checkpoint
   });
 
 checkpoint
-  .command('delete <checkpoint-id>')
-  .description('Delete a checkpoint')
-  .option('--investigation <id>', 'Investigation ID')
-  .option('--all', 'Delete all checkpoints for an investigation')
-  .action(async (checkpointId: string, options: { investigation?: string; all?: boolean }) => {
-    const store = createCheckpointStore();
+  .command('delete [checkpoint-id]')
+  .description('Delete a checkpoint or all checkpoints for an investigation')
+  .option('--investigation <id>', 'Investigation ID (required)')
+  .option('--all', 'Delete all checkpoints for the investigation')
+  .action(
+    async (
+      checkpointId: string | undefined,
+      options: { investigation?: string; all?: boolean }
+    ) => {
+      const store = createCheckpointStore();
 
-    if (options.all && options.investigation) {
-      const deleted = await store.deleteAll(options.investigation);
-      console.log(chalk.green(`Deleted ${deleted} checkpoints for ${options.investigation}`));
-    } else if (options.investigation) {
-      const success = await store.delete(options.investigation, checkpointId);
-      if (success) {
-        console.log(chalk.green(`Deleted checkpoint: ${checkpointId}`));
-      } else {
-        console.error(chalk.red(`Checkpoint not found: ${checkpointId}`));
+      if (!options.investigation) {
+        console.error(chalk.red('Please specify --investigation <id>'));
         process.exit(1);
       }
-    } else {
-      console.error(chalk.red('Please specify --investigation <id>'));
-      process.exit(1);
+
+      if (options.all) {
+        const deleted = await store.deleteAll(options.investigation);
+        console.log(chalk.green(`Deleted ${deleted} checkpoints for ${options.investigation}`));
+      } else if (checkpointId) {
+        const success = await store.delete(options.investigation, checkpointId);
+        if (success) {
+          console.log(chalk.green(`Deleted checkpoint: ${checkpointId}`));
+        } else {
+          console.error(chalk.red(`Checkpoint not found: ${checkpointId}`));
+          process.exit(1);
+        }
+      } else {
+        console.error(chalk.red('Please specify a checkpoint ID or use --all'));
+        process.exit(1);
+      }
     }
-  });
+  );
 
 // Parse and run
 program.parse();

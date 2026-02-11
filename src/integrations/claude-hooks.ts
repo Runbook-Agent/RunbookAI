@@ -82,6 +82,8 @@ export interface PersistClaudeHookEventOptions {
   projectDir?: string;
   now?: Date;
   storage?: ClaudeSessionStorage;
+  /** Pre-read stdin content. If provided, stdin will not be read again. */
+  input?: string;
 }
 
 export interface PersistClaudeHookEventResult {
@@ -500,7 +502,8 @@ async function readStdin(): Promise<string> {
 export async function handleClaudeHookStdin(
   options: PersistClaudeHookEventOptions = {}
 ): Promise<HandleClaudeHookStdinResult> {
-  const input = await readStdin();
+  // Use pre-read input if provided, otherwise read from stdin
+  const input = options.input !== undefined ? options.input : await readStdin();
   if (input.trim().length === 0) {
     return { handled: false, reason: 'empty_stdin' };
   }

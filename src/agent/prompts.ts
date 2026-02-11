@@ -35,13 +35,10 @@ export interface ContextEngineeringConfig {
  * Build the system prompt with tool descriptions
  */
 export function buildSystemPrompt(tools: Tool[], skills: string[], config?: PromptConfig): string {
-  const toolDescriptions = tools
-    .map((t) => `- **${t.name}**: ${t.description}`)
-    .join('\n');
+  const toolDescriptions = tools.map((t) => `- **${t.name}**: ${t.description}`).join('\n');
 
-  const skillList = skills.length > 0
-    ? skills.map((s) => `- ${s}`).join('\n')
-    : 'No skills configured.';
+  const skillList =
+    skills.length > 0 ? skills.map((s) => `- ${s}`).join('\n') : 'No skills configured.';
 
   const awsContext = config?.awsDefaultRegion
     ? `\n## Infrastructure Configuration\n\n- **Default AWS Region**: ${config.awsDefaultRegion}\n- **Configured Regions**: ${config.awsRegions?.join(', ') || config.awsDefaultRegion}\n\nWhen querying AWS, use the configured default region unless the user specifies otherwise.\n`
@@ -335,9 +332,8 @@ export function buildHypothesisContext(hypotheses: Hypothesis[]): string {
   const lines: string[] = ['### Active Hypotheses\n'];
 
   for (const h of hypotheses) {
-    const status = h.evidenceStrength !== 'pending'
-      ? `[${h.evidenceStrength.toUpperCase()}]`
-      : '[PENDING]';
+    const status =
+      h.evidenceStrength !== 'pending' ? `[${h.evidenceStrength.toUpperCase()}]` : '[PENDING]';
     lines.push(`- ${h.id}: ${h.statement} ${status}`);
     if (h.reasoning) {
       lines.push(`  Reasoning: ${h.reasoning}`);
@@ -412,16 +408,17 @@ export function buildInfraOverviewSection(infraContext: InfrastructureContext): 
 
   // Health summary
   const { healthSummary, inventory, activeAlarms } = infraContext;
-  const healthEmoji = healthSummary.overall === 'healthy' ? '✓' :
-                      healthSummary.overall === 'degraded' ? '!' : '✗';
+  const healthEmoji =
+    healthSummary.overall === 'healthy' ? '✓' : healthSummary.overall === 'degraded' ? '!' : '✗';
   sections.push(`**Status:** ${healthEmoji} ${healthSummary.overall.toUpperCase()}`);
-  sections.push(`Resources: ${healthSummary.healthy} healthy, ${healthSummary.warning} warning, ${healthSummary.critical} critical\n`);
+  sections.push(
+    `Resources: ${healthSummary.healthy} healthy, ${healthSummary.warning} warning, ${healthSummary.critical} critical\n`
+  );
 
   // Service inventory
   if (inventory.size > 0) {
     sections.push('**Service Inventory:**');
-    const sorted = Array.from(inventory.entries())
-      .sort((a, b) => b[1].count - a[1].count);
+    const sorted = Array.from(inventory.entries()).sort((a, b) => b[1].count - a[1].count);
     for (const [serviceId, inv] of sorted.slice(0, 6)) {
       const status = inv.unhealthy > 0 ? ` (${inv.unhealthy} unhealthy)` : '';
       sections.push(`- ${serviceId}: ${inv.count}${status}`);
@@ -451,10 +448,12 @@ export function buildKnowledgeAvailabilitySection(knowledgeContext: KnowledgeCon
     sections.push(`**Runbooks:** ${index.runbooks.length} available`);
     const servicesWithRunbooks = new Set<string>();
     for (const rb of index.runbooks) {
-      rb.services.forEach(s => servicesWithRunbooks.add(s));
+      rb.services.forEach((s) => servicesWithRunbooks.add(s));
     }
     if (servicesWithRunbooks.size > 0) {
-      sections.push(`Services with runbooks: ${Array.from(servicesWithRunbooks).slice(0, 8).join(', ')}`);
+      sections.push(
+        `Services with runbooks: ${Array.from(servicesWithRunbooks).slice(0, 8).join(', ')}`
+      );
     }
   }
 
@@ -696,10 +695,7 @@ Respond with JSON array:
 /**
  * Build sub-hypothesis generation prompt
  */
-export function buildSubHypothesisPrompt(
-  parentHypothesis: Hypothesis,
-  evidence: unknown
-): string {
+export function buildSubHypothesisPrompt(parentHypothesis: Hypothesis, evidence: unknown): string {
   return `A hypothesis has strong supporting evidence but needs deeper investigation.
 
 ## Parent Hypothesis

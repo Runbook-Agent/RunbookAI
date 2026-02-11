@@ -369,6 +369,56 @@ describe('CheckpointStore', () => {
 
       expect(success).toBe(false);
     });
+
+    it('should update latest.json when deleting the latest checkpoint', async () => {
+      // Create two checkpoints
+      const cp1 = createCheckpoint('inv-delete-latest', {
+        query: 'First',
+        phase: 'triage',
+        hypotheses: [],
+      });
+      await store.save(cp1);
+      await new Promise((r) => setTimeout(r, 10));
+
+      const cp2 = createCheckpoint('inv-delete-latest', {
+        query: 'Second (latest)',
+        phase: 'investigate',
+        hypotheses: [],
+      });
+      await store.save(cp2);
+
+      // Verify cp2 is latest
+      let latest = await store.loadLatest('inv-delete-latest');
+      expect(latest?.id).toBe(cp2.id);
+
+      // Delete the latest checkpoint
+      await store.delete('inv-delete-latest', cp2.id);
+
+      // Now cp1 should be latest
+      latest = await store.loadLatest('inv-delete-latest');
+      expect(latest?.id).toBe(cp1.id);
+      expect(latest?.query).toBe('First');
+    });
+
+    it('should remove latest.json when deleting the only checkpoint', async () => {
+      const cp = createCheckpoint('inv-delete-only', {
+        query: 'Only one',
+        phase: 'triage',
+        hypotheses: [],
+      });
+      await store.save(cp);
+
+      // Verify it exists
+      let latest = await store.loadLatest('inv-delete-only');
+      expect(latest?.id).toBe(cp.id);
+
+      // Delete the only checkpoint
+      await store.delete('inv-delete-only', cp.id);
+
+      // latest.json should be gone
+      latest = await store.loadLatest('inv-delete-only');
+      expect(latest).toBeNull();
+    });
   });
 
   describe('deleteAll', () => {

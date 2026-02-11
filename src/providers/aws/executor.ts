@@ -112,15 +112,24 @@ export async function executeListOperation(
 
   // Import the SDK module
   const module = await importModule(service.sdkPackage);
-  const ClientClass = (module as Record<string, unknown>)[service.clientClass] as new (config: { region: string }) => unknown;
-  const CommandClass = (module as Record<string, unknown>)[operation.command] as new (params: Record<string, unknown>) => unknown;
+  const ClientClass = (module as Record<string, unknown>)[service.clientClass] as new (config: {
+    region: string;
+  }) => unknown;
+  const CommandClass = (module as Record<string, unknown>)[operation.command] as new (
+    params: Record<string, unknown>
+  ) => unknown;
 
   if (!ClientClass || !CommandClass) {
-    throw new Error(`Could not find ${service.clientClass} or ${operation.command} in ${service.sdkPackage}`);
+    throw new Error(
+      `Could not find ${service.clientClass} or ${operation.command} in ${service.sdkPackage}`
+    );
   }
 
   // Get the client using our multi-account system
-  const client = await getClient(ClientClass as new (config: { region: string }) => { send: (cmd: unknown) => Promise<unknown> }, { accountName, region });
+  const client = await getClient(
+    ClientClass as new (config: { region: string }) => { send: (cmd: unknown) => Promise<unknown> },
+    { accountName, region }
+  );
 
   // Collect results with pagination
   const allResults: unknown[] = [];
@@ -169,7 +178,9 @@ export async function executeListOperation(
   const limitedResults = limit ? allResults.slice(0, limit) : allResults;
 
   // Format resources
-  const formattedResources = limitedResults.map((r) => formatResource(r, service.resourceFormatter));
+  const formattedResources = limitedResults.map((r) =>
+    formatResource(r, service.resourceFormatter)
+  );
 
   return {
     resources: formattedResources,
@@ -188,8 +199,13 @@ export async function executeMultiServiceQuery(
     region?: string;
     limit?: number;
   } = {}
-): Promise<Record<string, { resources: Record<string, unknown>[]; count: number; error?: string }>> {
-  const results: Record<string, { resources: Record<string, unknown>[]; count: number; error?: string }> = {};
+): Promise<
+  Record<string, { resources: Record<string, unknown>[]; count: number; error?: string }>
+> {
+  const results: Record<
+    string,
+    { resources: Record<string, unknown>[]; count: number; error?: string }
+  > = {};
 
   await Promise.all(
     services.map(async (service) => {
@@ -227,7 +243,9 @@ export async function isServiceAvailable(service: AWSServiceDefinition): Promise
 /**
  * Get list of installed services
  */
-export async function getInstalledServices(services: AWSServiceDefinition[]): Promise<AWSServiceDefinition[]> {
+export async function getInstalledServices(
+  services: AWSServiceDefinition[]
+): Promise<AWSServiceDefinition[]> {
   const installed: AWSServiceDefinition[] = [];
 
   for (const service of services) {

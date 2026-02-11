@@ -168,14 +168,17 @@ Checkpoints allow you to save and resume investigation state across Claude Code 
 # List all checkpoints for an investigation
 runbook checkpoint list --investigation inv-12345
 
-# Show checkpoint details
-runbook checkpoint show --id abc123def456
+# List all investigations with checkpoints
+runbook checkpoint list
 
-# Delete a checkpoint
-runbook checkpoint delete --id abc123def456
+# Show checkpoint details
+runbook checkpoint show abc123def456 --investigation inv-12345
+
+# Delete a specific checkpoint
+runbook checkpoint delete abc123def456 --investigation inv-12345
 
 # Delete all checkpoints for an investigation
-runbook checkpoint delete-all --investigation inv-12345
+runbook checkpoint delete --investigation inv-12345 --all
 ```
 
 ### What's Saved
