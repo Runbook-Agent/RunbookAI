@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/Runbook-Agent/RunbookAI/compare/v0.4.0...v0.4.1) (2026-02-12)
+
+
+### Bug Fixes
+
+* use tsup for ESM-compatible builds ([#61](https://github.com/Runbook-Agent/RunbookAI/issues/61)) ([40bd47f](https://github.com/Runbook-Agent/RunbookAI/commit/40bd47f4efe108a88b2c18c958e915c3e2078881))
+
 ## [0.4.0](https://github.com/Runbook-Agent/RunbookAI/compare/v0.3.0...v0.4.0) (2026-02-12)
 
 
