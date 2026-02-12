@@ -499,6 +499,10 @@ body {
   font-weight: 500;
 }
 
+.install-label-highlight {
+  color: var(--color-purple-light);
+}
+
 .install-box {
   display: flex;
   align-items: center;
