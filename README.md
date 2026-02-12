@@ -10,7 +10,8 @@
              Your AI SRE, always on call
 ```
 
-[![CI](https://github.com/manthan787/RunbookAI/actions/workflows/ci.yml/badge.svg)](https://github.com/manthan787/RunbookAI/actions/workflows/ci.yml)
+[![CI](https://github.com/Runbook-Agent/RunbookAI/actions/workflows/ci.yml/badge.svg)](https://github.com/Runbook-Agent/RunbookAI/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/%40runbook-agent%2Frunbook)](https://www.npmjs.com/package/@runbook-agent/runbook)
 
 </div>
 
@@ -19,6 +20,20 @@ RunbookAI helps on-call engineers go from alert to likely root cause faster with
 Built for SRE and platform teams operating AWS and Kubernetes who need speed without losing auditability.
 
 ## Start in 60 Seconds
+
+### Install via npm
+
+```bash
+# Install globally
+npm install -g @runbook-agent/runbook
+
+# Verify installation
+runbook --help
+```
+
+Package: [`@runbook-agent/runbook`](https://www.npmjs.com/package/@runbook-agent/runbook)
+
+### From Source (Development)
 
 ### Prerequisites
 - Node.js 20+
