@@ -471,6 +471,13 @@ Helper variants:
 - `npm run release:dry-run` to validate preconditions without triggering workflow
 - `npm run release:skip-checks` to bypass local checks (typecheck/lint/test/build)
 
+### Org Policy Compatibility
+
+If your GitHub organization blocks write permissions for `GITHUB_TOKEN`, set a repo secret:
+- `RELEASE_PLEASE_TOKEN` (PAT or fine-grained token with permission to write contents/pull requests/issues)
+
+The release workflow automatically prefers `RELEASE_PLEASE_TOKEN` when present.
+
 ### npm Publish Setup (Optional)
 
 Use npm Trusted Publishing (OIDC), then enable publishing:
