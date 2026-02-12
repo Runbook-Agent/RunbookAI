@@ -4,8 +4,9 @@
   "description": "Agentic cloud operator and incident investigator",
   "type": "module",
   "main": "dist/cli.js",
+  "repository": "https://github.com/Runbook-Agent/RunbookAI",
   "bin": {
-    "runbook": "./dist/cli.js"
+    "runbook": "dist/cli.js"
   },
   "scripts": {
     "dev": "tsx src/cli.tsx",
