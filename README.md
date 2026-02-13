@@ -30,7 +30,7 @@ Watch the agent investigate a simulated incident—forming hypotheses, gathering
 
 <p align="center">
   <a href="https://userunbook.ai/#demo">
-    <img src="docs/assets/demo.gif" alt="RunbookAI Demo" width="600" />
+    <img src="docs/assets/demo.gif" alt="RunbookAI Demo"/>
   </a>
 </p>
 
