@@ -28,34 +28,11 @@ npx @runbook-agent/runbook demo
 
 Watch the agent investigate a simulated incident—forming hypotheses, gathering evidence, and identifying root cause—all in your terminal.
 
-[Watch the live demo on our website](https://userunbook.ai/#demo)
-
-<details>
-<summary>Text preview</summary>
-
-```text
-⚠  INCIDENT ALERT
-   ID: DEMO-001
-   High latency on checkout-api
-
-▸ Gathering incident context...
-  ┌─ get_incident_details
-  └─ Severity: High, Error rate: 15%, P99 latency: 2,500ms
-
-▸ Forming hypotheses...
-  H1: Redis connection pool exhaustion (72%)
-  H2: Database connection pool exhaustion (54%)
-
-▸ Testing H1: Redis connection exhaustion...
-  ✓ Evidence: Redis connections at 847/1000 (340% above baseline)
-  ✓ Evidence: Traffic spike correlates with connection exhaustion
-
- ROOT CAUSE IDENTIFIED
-  Redis connection pool exhaustion due to traffic spike
-  Confidence: 94%
-```
-
-</details>
+<p align="center">
+  <a href="https://userunbook.ai/#demo">
+    <img src="docs/assets/demo.gif" alt="RunbookAI Demo" width="600" />
+  </a>
+</p>
 
 Use `--fast` for a quicker demo: `npx @runbook-agent/runbook demo --fast`
 
