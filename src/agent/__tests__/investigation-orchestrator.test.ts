@@ -685,6 +685,75 @@ describe('InvestigationOrchestrator', () => {
       expect(remediationPrompt).toContain('Available Code Fix Candidates');
       expect(remediationPrompt).toContain('https://github.com/acme/platform/pull/42');
     });
+
+    it('should truncate oversized tool payloads before composing triage and evidence prompts', async () => {
+      let callIndex = 0;
+      const prompts: string[] = [];
+      const hugePayload = 'X'.repeat(10000);
+
+      const complete = vi.fn().mockImplementation(async (prompt: string) => {
+        prompts.push(prompt);
+        callIndex++;
+        if (callIndex === 1) return mockTriageResponse;
+        if (callIndex === 2) return mockHypothesisResponse;
+        if (callIndex === 3) return mockEvidenceEvaluationConfirm;
+        if (callIndex === 4) return mockConclusionResponse;
+        if (callIndex === 5) return mockRemediationResponse;
+        return mockEvidenceEvaluationPrune;
+      });
+      const llm: LLMClient = { complete };
+
+      const execute = vi.fn().mockImplementation(async (tool: string) => {
+        if (tool === 'search_knowledge') {
+          return {
+            documentCount: 1,
+            runbooks: [{ title: 'Large Runbook', content: hugePayload }],
+          };
+        }
+        if (tool === 'cloudwatch_alarms') {
+          return [{ alarmName: 'HighLatency', stateValue: 'ALARM', description: hugePayload }];
+        }
+        if (tool === 'cloudwatch_logs') {
+          return [{ message: hugePayload }];
+        }
+        if (tool === 'datadog') {
+          return { triggeredMonitors: [{ name: 'Latency Monitor', details: hugePayload }] };
+        }
+        if (tool === 'aws_query') {
+          return {
+            totalResources: 1,
+            results: {
+              lambda: {
+                count: 1,
+                resources: [{ id: 'fn_1', raw: { details: hugePayload } }],
+              },
+            },
+          };
+        }
+        return { success: true };
+      });
+      const toolExecutor: ToolExecutor = { execute };
+
+      const orchestrator = createOrchestrator(llm, toolExecutor, {
+        availableTools: [
+          'search_knowledge',
+          'cloudwatch_alarms',
+          'cloudwatch_logs',
+          'datadog',
+          'aws_query',
+        ],
+      });
+
+      await orchestrator.investigate('Investigate prompt truncation behavior');
+
+      const triagePrompt = prompts[0] || '';
+      const evidencePrompt = prompts[2] || '';
+
+      expect(triagePrompt).toContain('truncated');
+      expect(evidencePrompt).toContain('truncated');
+      expect(triagePrompt.length).toBeLessThan(12000);
+      expect(evidencePrompt.length).toBeLessThan(15000);
+    });
   });
 
   describe('log analysis', () => {
