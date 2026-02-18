@@ -418,6 +418,33 @@ function normalizeApiAuth(value: unknown): ApiSourceConfig['auth'] | undefined {
       value: authValue,
     };
   }
+
+  // Backward compatibility: treat legacy auth.apiToken as bearer token.
+  const legacyToken = obj.apiToken;
+  if (typeof legacyToken === 'string' && legacyToken.trim().length > 0) {
+    return {
+      type: 'bearer',
+      value: legacyToken,
+    };
+  }
+
+  // Backward compatibility: treat legacy auth header as "Header: value".
+  const legacyEmail = obj.email;
+  if (typeof legacyEmail === 'string' && legacyEmail.trim().length > 0) {
+    return {
+      type: 'header',
+      value: legacyEmail,
+    };
+  }
+
+  return undefined;
+}
+
+function readOptionalStringField(source: Record<string, unknown>, key: string): string | undefined {
+  const value = source[key];
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value;
+  }
   return undefined;
 }
 
@@ -487,12 +514,22 @@ function normalizeConfiguredSources(
       }
 
       case 'notion': {
-        if (!source.databaseId || !source.endpoint) {
-          // Notion in config schema currently lacks a dedicated apiKey field.
-          // Reuse endpoint + auth/header values when present in future PR.
+        const sourceRecord = source as Record<string, unknown>;
+        const notionApiKey =
+          readOptionalStringField(sourceRecord, 'apiKey') ||
+          source.auth?.apiToken ||
+          process.env.RUNBOOK_NOTION_API_KEY ||
+          process.env.NOTION_API_KEY;
+
+        if (!source.databaseId || !notionApiKey) {
           console.warn('Skipping incomplete Notion knowledge source.');
           continue;
         }
+        normalized.push({
+          type: 'notion',
+          databaseId: source.databaseId,
+          apiKey: notionApiKey,
+        });
         break;
       }
 
@@ -501,12 +538,18 @@ function normalizeConfiguredSources(
           console.warn('Skipping incomplete GitHub knowledge source.');
           continue;
         }
+        const sourceRecord = source as Record<string, unknown>;
+        const explicitToken = readOptionalStringField(sourceRecord, 'token');
         normalized.push({
           type: 'github',
           repo: source.repo,
           branch: source.branch || 'main',
           path: source.path || '',
-          token: source.auth?.apiToken || process.env.GITHUB_TOKEN,
+          token:
+            explicitToken ||
+            source.auth?.apiToken ||
+            process.env.RUNBOOK_GITHUB_TOKEN ||
+            process.env.GITHUB_TOKEN,
         });
         break;
       }
