@@ -5,7 +5,7 @@
  * to Claude Code via the Model Context Protocol.
  */
 
-import { createRetriever, KnowledgeRetriever } from '../knowledge/retriever/index';
+import { createConfiguredRetriever, KnowledgeRetriever } from '../knowledge/retriever/index';
 import type { RetrievedChunk, KnowledgeType } from '../knowledge/types';
 
 /**
@@ -386,6 +386,7 @@ async function handleListServices(
 export class MCPServer {
   private config: MCPServerConfig;
   private retriever: KnowledgeRetriever | null = null;
+  private retrieverPromise: Promise<KnowledgeRetriever> | null = null;
 
   constructor(config: Partial<MCPServerConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -401,9 +402,12 @@ export class MCPServer {
   /**
    * Initialize the retriever
    */
-  private getRetriever(): KnowledgeRetriever {
+  private async getRetriever(): Promise<KnowledgeRetriever> {
     if (!this.retriever) {
-      this.retriever = createRetriever(this.config.baseDir);
+      if (!this.retrieverPromise) {
+        this.retrieverPromise = createConfiguredRetriever(this.config.baseDir);
+      }
+      this.retriever = await this.retrieverPromise;
     }
     return this.retriever;
   }
@@ -412,7 +416,7 @@ export class MCPServer {
    * Handle a tool call
    */
   async handleToolCall(request: MCPToolCallRequest): Promise<MCPToolCallResponse> {
-    const retriever = this.getRetriever();
+    const retriever = await this.getRetriever();
 
     try {
       switch (request.name) {

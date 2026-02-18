@@ -16,7 +16,7 @@ import type { AgentEvent } from '../agent/types';
 import { MarkdownText } from './components/markdown';
 import { skillRegistry } from '../skills/registry';
 import { getRuntimeTools } from './runtime-tools';
-import { createRetriever } from '../knowledge/retriever';
+import { createConfiguredRetriever } from '../knowledge/retriever';
 import { createMemory, type ConversationMemory } from '../agent/conversation-memory';
 
 const LOGO = `
@@ -91,7 +91,7 @@ export function ChatInterface() {
       await skillRegistry.loadUserSkills();
       const runtimeSkills = skillRegistry.getAll().map((skill) => skill.id);
       const runtimeTools = await getRuntimeTools(config, toolRegistry.getAll());
-      const retriever = createRetriever();
+      const retriever = await createConfiguredRetriever('.runbook', config);
 
       const newAgent = new Agent({
         llm,
