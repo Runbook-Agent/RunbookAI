@@ -8,7 +8,7 @@
 import { existsSync } from 'fs';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
-import { createRetriever, KnowledgeRetriever } from '../knowledge/retriever/index';
+import { createConfiguredRetriever, KnowledgeRetriever } from '../knowledge/retriever/index';
 import type { RetrievedKnowledge, RetrievedChunk } from '../knowledge/types';
 
 /**
@@ -259,7 +259,7 @@ export async function handleSessionStart(
   let knowledgeStats = '';
 
   try {
-    retriever = createRetriever(config.baseDir);
+    retriever = await createConfiguredRetriever(config.baseDir);
     const counts = retriever.getDocumentCountsByType();
     const total = Object.values(counts).reduce((sum, c) => sum + c, 0);
 
@@ -326,7 +326,7 @@ export async function handleUserPromptSubmit(
   let retriever: KnowledgeRetriever | null = null;
 
   try {
-    retriever = createRetriever(config.baseDir);
+    retriever = await createConfiguredRetriever(config.baseDir);
     knowledge = await retriever.search(searchQuery, {
       serviceFilter: services.length > 0 ? services : undefined,
       limit: 10,

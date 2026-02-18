@@ -18,7 +18,7 @@ import { quickSetup, loadServiceConfig, ONBOARDING_PROMPTS } from './config/onbo
 import { SetupWizard } from './cli/setup-wizard';
 import { ChatInterface } from './cli/chat';
 import { MarkdownText } from './cli/components/markdown';
-import { createRetriever } from './knowledge/retriever';
+import { createConfiguredRetriever } from './knowledge/retriever';
 import type { AgentEvent } from './agent/types';
 import { skillRegistry } from './skills/registry';
 import { getRuntimeTools } from './cli/runtime-tools';
@@ -56,8 +56,8 @@ const VERSION = '0.1.0';
 /**
  * Knowledge retriever adapter for Agent runtime.
  */
-function createAgentKnowledgeRetriever() {
-  const retriever = createRetriever();
+async function createAgentKnowledgeRetriever(config: Awaited<ReturnType<typeof loadConfig>>) {
+  const retriever = await createConfiguredRetriever('.runbook', config);
 
   return {
     retrieve: async (context: {
@@ -99,7 +99,7 @@ async function createRuntimeAgent(config: Awaited<ReturnType<typeof loadConfig>>
     llm,
     tools: runtimeTools,
     skills: runtimeSkills,
-    knowledgeRetriever: createAgentKnowledgeRetriever(),
+    knowledgeRetriever: await createAgentKnowledgeRetriever(config),
     config: {
       maxIterations: config.agent.maxIterations,
       maxHypothesisDepth: config.agent.maxHypothesisDepth,
@@ -667,7 +667,7 @@ async function runStructuredInvestigation(
       availableTools: runtimeTools.map((tool) => tool.name),
       availableSkills: runtimeSkills,
       fetchRelevantRunbooks: async (context: RemediationContext) => {
-        const retriever = createRetriever();
+        const retriever = await createConfiguredRetriever('.runbook', config);
         try {
           const searchQuery = [context.rootCause, ...context.affectedServices].join(' ').trim();
           const results = await retriever.search(
@@ -972,7 +972,7 @@ async function runStructuredInvestigation(
       }
 
       if (applyRunbookUpdates && learning.appliedRunbookUpdates.length > 0) {
-        const retriever = createRetriever();
+        const retriever = await createConfiguredRetriever('.runbook', config);
         try {
           await retriever.sync();
           console.log(chalk.gray('Knowledge index refreshed after runbook updates.'));
@@ -1255,7 +1255,7 @@ knowledge
   .action(async () => {
     console.log(chalk.blue('Syncing knowledge from configured sources...'));
     try {
-      const retriever = createRetriever();
+      const retriever = await createConfiguredRetriever();
       const { added, updated } = await retriever.sync();
       console.log(chalk.green(`Sync complete: ${added} added, ${updated} updated`));
       console.log(chalk.green(`Total documents: ${retriever.getDocumentCount()}`));
@@ -1274,7 +1274,7 @@ knowledge
     const query = queryParts.join(' ');
     console.log(chalk.blue(`Searching for: "${query}"`));
     try {
-      const retriever = createRetriever();
+      const retriever = await createConfiguredRetriever();
       const results = await retriever.search(query, {
         limit: 10,
         typeFilter: options.type
@@ -1359,7 +1359,7 @@ knowledge
       await copyFile(filePath, destPath);
 
       // Sync to update the index
-      const retriever = createRetriever();
+      const retriever = await createConfiguredRetriever();
       await retriever.sync();
 
       console.log(chalk.green(`Added: ${title}`));
@@ -1387,7 +1387,7 @@ knowledge
     console.log(chalk.blue(`Checking for content older than ${staleDays} days...`));
 
     try {
-      const retriever = createRetriever();
+      const retriever = await createConfiguredRetriever();
       await retriever.sync();
 
       // Get all documents directly from the store for accurate counts.
@@ -1444,7 +1444,7 @@ knowledge
     console.log(chalk.blue('Knowledge Base Statistics:'));
 
     try {
-      const retriever = createRetriever();
+      const retriever = await createConfiguredRetriever();
       await retriever.sync();
 
       const counts = retriever.getDocumentCountsByType();
