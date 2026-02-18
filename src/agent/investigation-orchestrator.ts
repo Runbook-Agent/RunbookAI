@@ -79,6 +79,7 @@ export interface RemediationContext {
 export interface InvestigationOptions {
   incidentId?: string;
   maxIterations?: number;
+  queryExecutionConcurrency?: number;
   autoApproveRemediation?: boolean;
   approveRemediationStep?: (step: RemediationStep) => Promise<boolean>;
   knownServices?: string[];
@@ -627,6 +628,37 @@ export class InvestigationOrchestrator {
     return formatted;
   }
 
+  private getQueryExecutionConcurrency(totalQueries: number): number {
+    const configured = this.options.queryExecutionConcurrency ?? 3;
+    if (!Number.isFinite(configured)) {
+      return 1;
+    }
+
+    return Math.max(1, Math.min(totalQueries, Math.floor(configured)));
+  }
+
+  private async runWithConcurrency<T>(
+    items: T[],
+    concurrency: number,
+    worker: (item: T) => Promise<void>
+  ): Promise<void> {
+    if (items.length === 0) {
+      return;
+    }
+
+    let index = 0;
+    const workerCount = Math.max(1, Math.min(concurrency, items.length));
+
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (index < items.length) {
+        const currentIndex = index++;
+        await worker(items[currentIndex]);
+      }
+    });
+
+    await Promise.all(workers);
+  }
+
   /**
    * Run a full investigation
    */
@@ -971,14 +1003,20 @@ export class InvestigationOrchestrator {
       return q;
     });
 
-    // Execute each query
+    const runnableQueries: CausalQuery[] = [];
     for (const query of refinedQueries) {
       const runnableQuery = this.adaptQueryToEnvironment(query);
       if (!runnableQuery) {
         results.set(query.id, { error: `No compatible tool available for ${query.tool}` });
         continue;
       }
+      runnableQueries.push(runnableQuery);
+    }
 
+    const concurrency = this.getQueryExecutionConcurrency(runnableQueries.length);
+    const queryResults = new Map<string, unknown>();
+
+    await this.runWithConcurrency(runnableQueries, concurrency, async (runnableQuery) => {
       this.emit({ type: 'query_executing', query: runnableQuery });
 
       try {
@@ -987,13 +1025,23 @@ export class InvestigationOrchestrator {
           runnableQuery.parameters
         );
         this.updateCloudWatchHints(runnableQuery.tool, result, runnableQuery.parameters);
-        results.set(runnableQuery.id, result);
+        queryResults.set(runnableQuery.id, result);
         machine.recordQueryResult(hypothesis.id, runnableQuery.id, result);
-
         this.emit({ type: 'query_complete', query: runnableQuery, result });
       } catch (error) {
-        results.set(runnableQuery.id, { error: String(error) });
+        const failure = { error: error instanceof Error ? error.message : String(error) };
+        queryResults.set(runnableQuery.id, failure);
+        machine.recordQueryResult(hypothesis.id, runnableQuery.id, failure);
+        this.emit({ type: 'query_complete', query: runnableQuery, result: failure });
       }
+    });
+
+    // Preserve deterministic result ordering based on generated query order.
+    for (const runnableQuery of runnableQueries) {
+      results.set(
+        runnableQuery.id,
+        queryResults.get(runnableQuery.id) || { error: 'No result returned' }
+      );
     }
 
     return results;
