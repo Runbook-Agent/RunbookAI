@@ -9,23 +9,23 @@ import type { AWSServiceDefinition, AWSOperation } from './services';
 import { getClient } from './client';
 
 // Cache for dynamically imported modules
-const moduleCache = new Map<string, unknown>();
+const moduleCache = new Map<string, Promise<unknown>>();
 
 /**
  * Dynamically import an AWS SDK module
  */
 async function importModule(packageName: string): Promise<unknown> {
-  if (moduleCache.has(packageName)) {
-    return moduleCache.get(packageName);
+  const cached = moduleCache.get(packageName);
+  if (cached) {
+    return cached;
   }
 
-  try {
-    const module = await import(packageName);
-    moduleCache.set(packageName, module);
-    return module;
-  } catch (error) {
+  const modulePromise = import(packageName).catch(() => {
+    moduleCache.delete(packageName);
     throw new Error(`Failed to import ${packageName}. Run: npm install ${packageName}`);
-  }
+  });
+  moduleCache.set(packageName, modulePromise);
+  return modulePromise;
 }
 
 /**
@@ -246,13 +246,17 @@ export async function isServiceAvailable(service: AWSServiceDefinition): Promise
 export async function getInstalledServices(
   services: AWSServiceDefinition[]
 ): Promise<AWSServiceDefinition[]> {
-  const installed: AWSServiceDefinition[] = [];
-
-  for (const service of services) {
-    if (await isServiceAvailable(service)) {
-      installed.push(service);
+  const availabilityByPackage = new Map<string, Promise<boolean>>();
+  const checks = services.map(async (service) => {
+    let availability = availabilityByPackage.get(service.sdkPackage);
+    if (!availability) {
+      availability = isServiceAvailable(service);
+      availabilityByPackage.set(service.sdkPackage, availability);
     }
-  }
+    const available = await availability;
+    return available ? service : null;
+  });
 
-  return installed;
+  const resolved = await Promise.all(checks);
+  return resolved.filter((service): service is AWSServiceDefinition => service !== null);
 }

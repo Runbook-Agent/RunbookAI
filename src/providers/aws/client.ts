@@ -8,7 +8,7 @@
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import { fromIni } from '@aws-sdk/credential-providers';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
-import type { AWSAccount } from '../../config/services';
+import type { AWSAccount, ServiceConfig } from '../../config/services';
 import { loadServiceConfig } from '../../config/onboarding';
 
 interface ClientCacheKey {
@@ -20,6 +20,27 @@ interface ClientCacheKey {
 // Cache for AWS clients
 const clientCache = new Map<string, unknown>();
 const credentialCache = new Map<string, AwsCredentialIdentity>();
+let serviceConfigCache: ServiceConfig | null | undefined;
+let serviceConfigPromise: Promise<ServiceConfig | null> | null = null;
+
+async function getServiceConfig(): Promise<ServiceConfig | null> {
+  if (serviceConfigCache !== undefined) {
+    return serviceConfigCache;
+  }
+
+  if (!serviceConfigPromise) {
+    serviceConfigPromise = loadServiceConfig()
+      .then((config) => {
+        serviceConfigCache = config;
+        return config;
+      })
+      .finally(() => {
+        serviceConfigPromise = null;
+      });
+  }
+
+  return serviceConfigPromise;
+}
 
 /**
  * Get credentials for an AWS account
@@ -83,7 +104,7 @@ export async function getClient<T>(
   } = {}
 ): Promise<T> {
   // Load service config
-  const config = await loadServiceConfig();
+  const config = await getServiceConfig();
 
   // Determine which account to use
   let account: AWSAccount | undefined;
@@ -125,7 +146,7 @@ export async function getClient<T>(
  * Get all configured accounts
  */
 export async function getConfiguredAccounts(): Promise<AWSAccount[]> {
-  const config = await loadServiceConfig();
+  const config = await getServiceConfig();
   return config?.aws.accounts || [];
 }
 
@@ -133,7 +154,7 @@ export async function getConfiguredAccounts(): Promise<AWSAccount[]> {
  * Get regions for an account
  */
 export async function getAccountRegions(accountName?: string): Promise<string[]> {
-  const config = await loadServiceConfig();
+  const config = await getServiceConfig();
 
   if (!config?.aws.accounts || config.aws.accounts.length === 0) {
     return [config?.aws.defaultRegion || process.env.AWS_REGION || 'us-east-1'];
@@ -158,7 +179,7 @@ export async function getEnabledServices(): Promise<{
   storage: string[];
   networking: string[];
 }> {
-  const config = await loadServiceConfig();
+  const config = await getServiceConfig();
 
   return {
     compute: config?.compute.filter((s) => s.enabled).map((s) => s.type) || [],
@@ -174,4 +195,6 @@ export async function getEnabledServices(): Promise<{
 export function clearCaches(): void {
   clientCache.clear();
   credentialCache.clear();
+  serviceConfigCache = undefined;
+  serviceConfigPromise = null;
 }
