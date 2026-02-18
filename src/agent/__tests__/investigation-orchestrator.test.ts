@@ -326,6 +326,67 @@ describe('InvestigationOrchestrator', () => {
       expect(mockToolExecutor.execute).toHaveBeenCalled();
     });
 
+    it('should execute hypothesis queries with parallelism', async () => {
+      let callIndex = 0;
+      const complete = vi.fn().mockImplementation(async () => {
+        callIndex++;
+        if (callIndex === 1) return mockTriageResponse;
+        if (callIndex === 2) {
+          return JSON.stringify({
+            hypotheses: [
+              {
+                statement: 'Unexpected behavior in custom subsystem',
+                category: 'application',
+                priority: 1,
+                confirmingEvidence: 'Correlated anomalies in telemetry',
+                refutingEvidence: 'No telemetry anomalies',
+                queries: [],
+              },
+            ],
+            reasoning: 'Start with broad telemetry correlation.',
+          });
+        }
+        if (callIndex === 3) return mockEvidenceEvaluationConfirm;
+        if (callIndex === 4) return mockConclusionResponse;
+        if (callIndex === 5) return mockRemediationResponse;
+        return mockEvidenceEvaluationPrune;
+      });
+      const llm: LLMClient = { complete };
+
+      let active = 0;
+      let maxActive = 0;
+      const execute = vi.fn().mockImplementation(async (tool: string) => {
+        if (tool === 'cloudwatch_alarms' || tool === 'cloudwatch_logs' || tool === 'datadog') {
+          active++;
+          maxActive = Math.max(maxActive, active);
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          active--;
+
+          if (tool === 'cloudwatch_alarms') {
+            return [];
+          }
+          if (tool === 'cloudwatch_logs') {
+            return { events: [], count: 0 };
+          }
+          return { triggeredMonitors: [], count: 0 };
+        }
+
+        if (tool === 'aws_query') {
+          return { totalResources: 0, results: {} };
+        }
+
+        return { success: true };
+      });
+      const toolExecutor: ToolExecutor = { execute };
+
+      const orchestrator = createOrchestrator(llm, toolExecutor, {
+        availableTools: ['cloudwatch_alarms', 'cloudwatch_logs', 'datadog', 'aws_query'],
+      });
+      await orchestrator.investigate('Investigate incident behavior');
+
+      expect(maxActive).toBeGreaterThan(1);
+    });
+
     it('should handle tool errors gracefully', async () => {
       // Reset call index for this test
       llmCallIndex = 0;
