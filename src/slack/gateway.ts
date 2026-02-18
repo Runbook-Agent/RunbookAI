@@ -4,7 +4,7 @@ import { Agent } from '../agent/agent';
 import { createLLMClient } from '../model/llm';
 import { toolRegistry } from '../tools/registry';
 import { skillRegistry } from '../skills/registry';
-import { createRetriever } from '../knowledge/retriever';
+import { createConfiguredRetriever } from '../knowledge/retriever';
 import { loadConfig, type Config } from '../utils/config';
 import { getRuntimeTools } from '../cli/runtime-tools';
 import { configure as configureSlack, postMessage } from '../tools/incident/slack';
@@ -257,8 +257,8 @@ function verifySlackSignature(
   }
 }
 
-function createAgentKnowledgeRetriever() {
-  const retriever = createRetriever();
+async function createAgentKnowledgeRetriever(config: Config) {
+  const retriever = await createConfiguredRetriever('.runbook', config);
 
   return {
     retrieve: async (context: {
@@ -300,7 +300,7 @@ async function createRuntimeAgent(config: Config): Promise<Agent> {
     llm,
     tools: runtimeTools,
     skills: runtimeSkills,
-    knowledgeRetriever: createAgentKnowledgeRetriever(),
+    knowledgeRetriever: await createAgentKnowledgeRetriever(config),
     config: {
       maxIterations: config.agent.maxIterations,
       maxHypothesisDepth: config.agent.maxHypothesisDepth,

@@ -49,7 +49,7 @@ import {
   getQuickHealthCheck,
   COMMON_QUERIES,
 } from './observability/prometheus';
-import { createRetriever } from '../knowledge/retriever';
+import { createConfiguredRetriever } from '../knowledge/retriever';
 import {
   AWS_SERVICES,
   getServiceById,
@@ -775,13 +775,13 @@ async function executeAwsMutation(
 }
 
 // Global retriever instance
-let retriever: ReturnType<typeof createRetriever> | null = null;
+let retrieverPromise: ReturnType<typeof createConfiguredRetriever> | null = null;
 
 function getRetriever() {
-  if (!retriever) {
-    retriever = createRetriever();
+  if (!retrieverPromise) {
+    retrieverPromise = createConfiguredRetriever();
   }
-  return retriever;
+  return retrieverPromise;
 }
 
 /**
@@ -822,7 +822,7 @@ export const searchKnowledgeTool = defineTool(
   },
   async (args) => {
     try {
-      const r = getRetriever();
+      const r = await getRetriever();
       const results = await r.search(args.query as string, {
         typeFilter: args.type_filter as
           | Array<'runbook' | 'postmortem' | 'architecture' | 'known_issue'>

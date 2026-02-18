@@ -106,6 +106,16 @@ const IncidentConfigSchema = z.object({
   slack: SlackConfigSchema.default({}),
 });
 
+const ConfluenceAuthSchema = z.object({
+  email: z.string(),
+  apiToken: z.string(),
+});
+
+const ApiSourceAuthSchema = z.object({
+  type: z.enum(['bearer', 'basic', 'header']),
+  value: z.string(),
+});
+
 const KnowledgeSourceSchema = z.object({
   type: z.enum(['filesystem', 'confluence', 'google_drive', 'notion', 'github', 'api']),
   path: z.string().optional(),
@@ -113,19 +123,16 @@ const KnowledgeSourceSchema = z.object({
   syncSchedule: z.string().optional(),
   // Additional type-specific fields
   repo: z.string().optional(),
+  token: z.string().optional(),
   branch: z.string().optional(),
   spaceKey: z.string().optional(),
   labels: z.array(z.string()).optional(),
   databaseId: z.string().optional(),
+  apiKey: z.string().optional(),
   endpoint: z.string().optional(),
   // Confluence fields
   baseUrl: z.string().optional(),
-  auth: z
-    .object({
-      email: z.string(),
-      apiToken: z.string(),
-    })
-    .optional(),
+  auth: z.union([ConfluenceAuthSchema, ApiSourceAuthSchema]).optional(),
   // Google Drive fields
   folderIds: z.array(z.string()).optional(),
   clientId: z.string().optional(),
@@ -420,5 +427,105 @@ export function validateConfig(config: Config): string[] {
     errors.push('Claude session storage backend is s3 but no bucket is configured.');
   }
 
+  for (const source of config.knowledge.sources) {
+    if (source.type === 'filesystem' && !source.path) {
+      errors.push('Knowledge source filesystem is missing `path`.');
+      continue;
+    }
+
+    if (source.type === 'confluence') {
+      if (!source.baseUrl || !source.spaceKey) {
+        errors.push('Knowledge source confluence requires `baseUrl` and `spaceKey`.');
+      }
+      if (!isConfluenceAuth(source.auth)) {
+        errors.push(
+          'Knowledge source confluence requires `auth.email` and `auth.apiToken` credentials.'
+        );
+      }
+      continue;
+    }
+
+    if (source.type === 'google_drive') {
+      if (!source.folderIds || source.folderIds.length === 0) {
+        errors.push('Knowledge source google_drive requires at least one `folderIds` entry.');
+      }
+      if (!source.clientId || !source.clientSecret) {
+        errors.push('Knowledge source google_drive requires `clientId` and `clientSecret`.');
+      }
+      if (!source.refreshToken) {
+        errors.push(
+          'Knowledge source google_drive is missing `refreshToken`. Run `runbook knowledge auth google`.'
+        );
+      }
+      continue;
+    }
+
+    if (source.type === 'notion') {
+      if (!source.databaseId) {
+        errors.push('Knowledge source notion requires `databaseId`.');
+      }
+      const notionApiKey =
+        source.apiKey || process.env.RUNBOOK_NOTION_API_KEY || process.env.NOTION_API_KEY;
+      if (!notionApiKey) {
+        errors.push(
+          'Knowledge source notion requires `apiKey` or RUNBOOK_NOTION_API_KEY/NOTION_API_KEY.'
+        );
+      }
+      continue;
+    }
+
+    if (source.type === 'github') {
+      if (!source.repo) {
+        errors.push('Knowledge source github requires `repo` (owner/repo).');
+      }
+      const githubToken =
+        source.token || process.env.RUNBOOK_GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+      if (!githubToken) {
+        errors.push(
+          'Knowledge source github requires `token` or RUNBOOK_GITHUB_TOKEN/GITHUB_TOKEN.'
+        );
+      }
+      continue;
+    }
+
+    if (source.type === 'api') {
+      if (!source.endpoint) {
+        errors.push('Knowledge source api requires `endpoint`.');
+      }
+      if (source.auth && !isApiSourceAuth(source.auth)) {
+        errors.push('Knowledge source api `auth` must define `type` and `value`.');
+      }
+    }
+  }
+
   return errors;
+}
+
+function isConfluenceAuth(value: unknown): value is z.infer<typeof ConfluenceAuthSchema> {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const auth = value as Record<string, unknown>;
+  return (
+    typeof auth.email === 'string' &&
+    auth.email.length > 0 &&
+    typeof auth.apiToken === 'string' &&
+    auth.apiToken.length > 0
+  );
+}
+
+function isApiSourceAuth(value: unknown): value is z.infer<typeof ApiSourceAuthSchema> {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const auth = value as Record<string, unknown>;
+  const type = auth.type;
+  const authValue = auth.value;
+  return (
+    (type === 'bearer' || type === 'basic' || type === 'header') &&
+    typeof authValue === 'string' &&
+    authValue.length > 0
+  );
 }

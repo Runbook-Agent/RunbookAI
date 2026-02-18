@@ -5,7 +5,7 @@ import { createLLMClient } from '../model/llm';
 import { toolRegistry } from '../tools/registry';
 import { skillRegistry } from '../skills/registry';
 import { getRuntimeTools } from '../cli/runtime-tools';
-import { createRetriever } from '../knowledge/retriever';
+import { createConfiguredRetriever } from '../knowledge/retriever';
 import {
   createOrchestrator,
   type InvestigationEvent,
@@ -351,7 +351,7 @@ async function main() {
           availableTools: runtimeTools.map((tool) => tool.name),
           availableSkills: runtimeSkills,
           fetchRelevantRunbooks: async (ctx: RemediationContext) => {
-            const retriever = createRetriever();
+            const retriever = await createConfiguredRetriever('.runbook', config);
             try {
               const searchQuery = [ctx.rootCause, ...ctx.affectedServices].join(' ').trim();
               const results = await retriever.search(searchQuery || 'incident remediation', {
