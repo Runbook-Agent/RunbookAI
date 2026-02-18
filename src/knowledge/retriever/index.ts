@@ -448,6 +448,34 @@ function readOptionalStringField(source: Record<string, unknown>, key: string): 
   return undefined;
 }
 
+function readConfluenceAuth(
+  auth: Config['knowledge']['sources'][number]['auth']
+): { email: string; apiToken: string } | null {
+  if (!auth || typeof auth !== 'object') {
+    return null;
+  }
+
+  const authRecord = auth as Record<string, unknown>;
+  const email = readOptionalStringField(authRecord, 'email');
+  const apiToken = readOptionalStringField(authRecord, 'apiToken');
+  if (!email || !apiToken) {
+    return null;
+  }
+
+  return { email, apiToken };
+}
+
+function readLegacyApiToken(
+  auth: Config['knowledge']['sources'][number]['auth']
+): string | undefined {
+  if (!auth || typeof auth !== 'object') {
+    return undefined;
+  }
+
+  const authRecord = auth as Record<string, unknown>;
+  return readOptionalStringField(authRecord, 'apiToken');
+}
+
 function normalizeConfiguredSources(
   sources: Config['knowledge']['sources'],
   baseDir: string
@@ -471,8 +499,8 @@ function normalizeConfiguredSources(
       }
 
       case 'confluence': {
-        const auth = source.auth;
-        if (!source.baseUrl || !source.spaceKey || !auth?.email || !auth?.apiToken) {
+        const auth = readConfluenceAuth(source.auth);
+        if (!source.baseUrl || !source.spaceKey || !auth) {
           console.warn('Skipping incomplete Confluence knowledge source.');
           continue;
         }
@@ -517,7 +545,7 @@ function normalizeConfiguredSources(
         const sourceRecord = source as Record<string, unknown>;
         const notionApiKey =
           readOptionalStringField(sourceRecord, 'apiKey') ||
-          source.auth?.apiToken ||
+          readLegacyApiToken(source.auth) ||
           process.env.RUNBOOK_NOTION_API_KEY ||
           process.env.NOTION_API_KEY;
 
@@ -547,7 +575,7 @@ function normalizeConfiguredSources(
           path: source.path || '',
           token:
             explicitToken ||
-            source.auth?.apiToken ||
+            readLegacyApiToken(source.auth) ||
             process.env.RUNBOOK_GITHUB_TOKEN ||
             process.env.GITHUB_TOKEN,
         });

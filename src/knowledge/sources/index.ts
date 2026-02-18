@@ -7,6 +7,7 @@
 import { loadFromFilesystem } from './filesystem';
 import { loadFromConfluence } from './confluence';
 import { loadFromGoogleDrive } from './google-drive';
+import { loadFromNotion } from './notion';
 import { loadFromGitHub } from './github';
 import type { KnowledgeDocument, KnowledgeSourceConfig } from '../types';
 
@@ -28,13 +29,15 @@ export async function loadFromSource(
     case 'confluence':
       return loadFromConfluence(config, options);
 
+    case 'notion':
+      return loadFromNotion(config, options);
+
     case 'google_drive':
       return loadFromGoogleDrive(config, options);
 
     case 'github':
       return loadFromGitHub(config, options);
 
-    case 'notion':
     case 'api':
       console.warn(`Source type '${config.type}' is not yet implemented`);
       return [];
@@ -48,4 +51,5 @@ export async function loadFromSource(
 export { loadFromFilesystem } from './filesystem';
 export { loadFromConfluence } from './confluence';
 export { loadFromGoogleDrive } from './google-drive';
+export { loadFromNotion } from './notion';
 export { loadFromGitHub } from './github';
