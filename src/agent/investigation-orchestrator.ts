@@ -89,6 +89,30 @@ export interface InvestigationOptions {
   fetchRelevantRunbooks?: (context: RemediationContext) => Promise<string[]>;
 }
 
+interface PromptPayloadLimits {
+  maxChars: number;
+  maxDepth: number;
+  maxArrayItems: number;
+  maxObjectKeys: number;
+  maxStringLength: number;
+}
+
+const TRIAGE_PROMPT_LIMITS: PromptPayloadLimits = {
+  maxChars: 2800,
+  maxDepth: 4,
+  maxArrayItems: 12,
+  maxObjectKeys: 20,
+  maxStringLength: 320,
+};
+
+const EVIDENCE_PROMPT_LIMITS: PromptPayloadLimits = {
+  maxChars: 3600,
+  maxDepth: 5,
+  maxArrayItems: 15,
+  maxObjectKeys: 25,
+  maxStringLength: 400,
+};
+
 /**
  * Investigation result
  */
@@ -628,6 +652,77 @@ export class InvestigationOrchestrator {
     return formatted;
   }
 
+  private normalizePromptPayload(
+    value: unknown,
+    limits: PromptPayloadLimits,
+    depth: number = 0
+  ): unknown {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      if (value.length <= limits.maxStringLength) {
+        return value;
+      }
+      const remaining = value.length - limits.maxStringLength;
+      return `${value.slice(0, limits.maxStringLength)}... [${remaining} chars truncated]`;
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return value;
+    }
+
+    if (depth >= limits.maxDepth) {
+      return '[truncated: max depth reached]';
+    }
+
+    if (Array.isArray(value)) {
+      const normalizedItems = value
+        .slice(0, limits.maxArrayItems)
+        .map((item) => this.normalizePromptPayload(item, limits, depth + 1));
+      if (value.length > limits.maxArrayItems) {
+        normalizedItems.push(`[... ${value.length - limits.maxArrayItems} more items omitted]`);
+      }
+      return normalizedItems;
+    }
+
+    if (typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, unknown>);
+      const normalized: Record<string, unknown> = {};
+
+      for (const [key, entryValue] of entries.slice(0, limits.maxObjectKeys)) {
+        normalized[key] = this.normalizePromptPayload(entryValue, limits, depth + 1);
+      }
+
+      if (entries.length > limits.maxObjectKeys) {
+        normalized._truncatedKeys = `${entries.length - limits.maxObjectKeys} keys omitted`;
+      }
+
+      return normalized;
+    }
+
+    return String(value);
+  }
+
+  private summarizePromptPayload(value: unknown, limits: PromptPayloadLimits): string {
+    const normalized = this.normalizePromptPayload(value, limits);
+    let serialized: string;
+
+    try {
+      serialized = JSON.stringify(normalized, null, 2);
+    } catch {
+      serialized = String(value);
+    }
+
+    if (serialized.length <= limits.maxChars) {
+      return serialized;
+    }
+
+    const remaining = serialized.length - limits.maxChars;
+    return `${serialized.slice(0, limits.maxChars)}\n... [${remaining} chars truncated]`;
+  }
+
   private getQueryExecutionConcurrency(totalQueries: number): number {
     const configured = this.options.queryExecutionConcurrency ?? 3;
     if (!Number.isFinite(configured)) {
@@ -829,7 +924,9 @@ export class InvestigationOrchestrator {
           const result = await this.toolExecutor.execute(source.tool, source.params);
           this.emit({ type: 'query_complete', query: triageQuery, result });
           if (result && typeof result === 'object' && !(result as Record<string, unknown>).error) {
-            contextParts.push(`${source.label}: ${JSON.stringify(result)}`);
+            contextParts.push(
+              `${source.label}: ${this.summarizePromptPayload(result, TRIAGE_PROMPT_LIMITS)}`
+            );
             break;
           }
         } catch (error) {
@@ -885,7 +982,9 @@ export class InvestigationOrchestrator {
         this.emit({ type: 'query_complete', query: triageQuery, result });
         this.updateCloudWatchHints(source.tool, result, source.params);
         if (result) {
-          contextParts.push(`${source.label}: ${JSON.stringify(result)}`);
+          contextParts.push(
+            `${source.label}: ${this.summarizePromptPayload(result, TRIAGE_PROMPT_LIMITS)}`
+          );
           if (this.hasMeaningfulTriageSignal(source.tool, result)) {
             break;
           }
@@ -1058,7 +1157,9 @@ export class InvestigationOrchestrator {
     // Format evidence for LLM
     const evidenceLines: string[] = [];
     for (const [queryId, result] of queryResults) {
-      evidenceLines.push(`Query ${queryId}:\n${JSON.stringify(result, null, 2)}`);
+      evidenceLines.push(
+        `Query ${queryId}:\n${this.summarizePromptPayload(result, EVIDENCE_PROMPT_LIMITS)}`
+      );
     }
 
     const prompt = fillPrompt(PROMPTS.evaluateEvidence, {
