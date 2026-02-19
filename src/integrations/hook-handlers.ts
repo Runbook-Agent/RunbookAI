@@ -7,7 +7,7 @@
 
 import { existsSync } from 'fs';
 import { readFile, writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { createConfiguredRetriever, KnowledgeRetriever } from '../knowledge/retriever/index';
 import type { RetrievedKnowledge, RetrievedChunk } from '../knowledge/types';
 
@@ -80,6 +80,62 @@ const DEFAULT_CONFIG: HookHandlerConfig = {
   maxRunbooksToShow: 3,
   maxKnownIssuesToShow: 3,
 };
+
+const RETRIEVER_IDLE_TTL_MS = 2 * 60 * 1000;
+
+interface CachedRetriever {
+  retriever: KnowledgeRetriever;
+  lastUsedAt: number;
+}
+
+const retrieverCache = new Map<string, CachedRetriever>();
+
+function normalizeBaseDir(baseDir: string): string {
+  return resolve(baseDir);
+}
+
+function touchRetriever(baseDir: string): void {
+  const key = normalizeBaseDir(baseDir);
+  const cached = retrieverCache.get(key);
+  if (cached) {
+    cached.lastUsedAt = Date.now();
+  }
+}
+
+function pruneRetrieverCache(): void {
+  const now = Date.now();
+  for (const [key, cached] of retrieverCache.entries()) {
+    if (now - cached.lastUsedAt <= RETRIEVER_IDLE_TTL_MS) {
+      continue;
+    }
+    cached.retriever.close();
+    retrieverCache.delete(key);
+  }
+}
+
+async function getCachedRetriever(baseDir: string): Promise<KnowledgeRetriever> {
+  pruneRetrieverCache();
+  const key = normalizeBaseDir(baseDir);
+  const cached = retrieverCache.get(key);
+  if (cached) {
+    cached.lastUsedAt = Date.now();
+    return cached.retriever;
+  }
+
+  const retriever = await createConfiguredRetriever(baseDir);
+  retrieverCache.set(key, {
+    retriever,
+    lastUsedAt: Date.now(),
+  });
+  return retriever;
+}
+
+export function clearHookHandlerRetrieverCache(): void {
+  for (const cached of retrieverCache.values()) {
+    cached.retriever.close();
+  }
+  retrieverCache.clear();
+}
 
 /**
  * Extract services mentioned in a prompt
@@ -255,11 +311,10 @@ export async function handleSessionStart(
   await saveSessionState(config.baseDir, state);
 
   // Get knowledge stats
-  let retriever: KnowledgeRetriever | null = null;
   let knowledgeStats = '';
 
   try {
-    retriever = await createConfiguredRetriever(config.baseDir);
+    const retriever = await getCachedRetriever(config.baseDir);
     const counts = retriever.getDocumentCountsByType();
     const total = Object.values(counts).reduce((sum, c) => sum + c, 0);
 
@@ -273,7 +328,7 @@ export async function handleSessionStart(
   } catch {
     // Knowledge not available, that's ok
   } finally {
-    retriever?.close();
+    touchRetriever(config.baseDir);
   }
 
   return {
@@ -323,10 +378,9 @@ export async function handleUserPromptSubmit(
 
   // Retrieve relevant knowledge
   let knowledge: RetrievedKnowledge | null = null;
-  let retriever: KnowledgeRetriever | null = null;
 
   try {
-    retriever = await createConfiguredRetriever(config.baseDir);
+    const retriever = await getCachedRetriever(config.baseDir);
     knowledge = await retriever.search(searchQuery, {
       serviceFilter: services.length > 0 ? services : undefined,
       limit: 10,
@@ -334,7 +388,7 @@ export async function handleUserPromptSubmit(
   } catch {
     // Knowledge retrieval failed, continue without
   } finally {
-    retriever?.close();
+    touchRetriever(config.baseDir);
   }
 
   // Build system message

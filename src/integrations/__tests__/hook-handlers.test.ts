@@ -7,6 +7,7 @@ import { mkdir, rm, writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import {
+  clearHookHandlerRetrieverCache,
   handleSessionStart,
   handleUserPromptSubmit,
   handlePreToolUse,
@@ -26,6 +27,7 @@ describe('Hook Handlers', () => {
   });
 
   afterEach(async () => {
+    clearHookHandlerRetrieverCache();
     if (existsSync(TEST_BASE_DIR)) {
       await rm(TEST_BASE_DIR, { recursive: true, force: true });
     }
@@ -318,6 +320,7 @@ describe('Service Extraction', () => {
   });
 
   afterEach(async () => {
+    clearHookHandlerRetrieverCache();
     if (existsSync(TEST_BASE_DIR)) {
       await rm(TEST_BASE_DIR, { recursive: true, force: true });
     }
@@ -364,6 +367,7 @@ describe('Symptom Extraction', () => {
   });
 
   afterEach(async () => {
+    clearHookHandlerRetrieverCache();
     if (existsSync(TEST_BASE_DIR)) {
       await rm(TEST_BASE_DIR, { recursive: true, force: true });
     }
