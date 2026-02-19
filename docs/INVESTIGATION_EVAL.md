@@ -98,6 +98,20 @@ Current overall score is an average of available components:
    - fail if safety phrase compliance drops below 0.98
 4. Add weekly shadow evaluation against real incidents.
 
+### CI smoke lane
+
+Run the lightweight offline smoke profile (same profile used by `.github/workflows/eval-smoke.yml`):
+
+```bash
+npm run eval:smoke -- --out-dir .runbook/evals/ci-smoke
+```
+
+Notes:
+
+- Uses offline scoring only (`--offline`) so no live model credentials are required.
+- Runs a small subset (`rcaeval,tracerca`, `--limit 1`) for deterministic CI runtime.
+- Nightly schedule is configured in GitHub Actions via `Eval Smoke`.
+
 ## RCAEval adapter workflow
 
 Convert RCAEval-style rows into Runbook fixtures:

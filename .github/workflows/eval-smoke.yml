@@ -1,0 +1,50 @@
+name: Eval Smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/agent/**'
+      - 'src/cli/**'
+      - 'src/eval/**'
+      - 'src/tools/**'
+      - '.github/workflows/eval-smoke.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  eval-smoke:
+    name: Offline Eval Smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run offline benchmark smoke
+        run: |
+          npm run eval:smoke -- --out-dir .runbook/evals/ci-smoke
+
+      - name: Print benchmark summary
+        run: |
+          node -e "const fs=require('fs');const p='.runbook/evals/ci-smoke/summary.json';const s=JSON.parse(fs.readFileSync(p,'utf8'));console.log(JSON.stringify({timestamp:s.timestamp,offline:s.offline,results:s.results.map(r=>({benchmark:r.benchmark,status:r.status,passedCases:r.passedCases,totalCases:r.totalCases}))},null,2));"
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-smoke-report
+          path: .runbook/evals/ci-smoke
+          if-no-files-found: warn
