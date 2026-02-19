@@ -673,6 +673,425 @@ function summarizeKnowledgeSearch(
 }
 
 /**
+ * Summarizer for kubernetes_query results.
+ */
+function summarizeKubernetesQuery(
+  result: unknown,
+  args: Record<string, unknown>
+): CompactToolResult {
+  const action = (args.action as string) || 'query';
+  const resultId = generateResultId('k8s', Date.now());
+  const services = extractServices(result);
+
+  if (!result || typeof result !== 'object') {
+    return {
+      summary: `Kubernetes ${action} query completed`,
+      highlights: {},
+      itemCount: 0,
+      resultId,
+      hasErrors: false,
+      services,
+      healthStatus: 'unknown',
+    };
+  }
+
+  const obj = result as Record<string, unknown>;
+  if (typeof obj.error === 'string' && obj.error.trim().length > 0) {
+    return {
+      summary: `Kubernetes ${action} failed: ${obj.error}`,
+      highlights: {
+        hint: obj.hint,
+      },
+      itemCount: 0,
+      resultId,
+      hasErrors: true,
+      services,
+      healthStatus: 'critical',
+    };
+  }
+
+  if (Array.isArray(obj.pods)) {
+    const pods = obj.pods as Array<Record<string, unknown>>;
+    const unhealthy = pods.filter((pod) => {
+      const status = String(pod.status || '');
+      return status.toLowerCase() !== 'running';
+    });
+    return {
+      summary: `Kubernetes pods: ${pods.length} total, ${unhealthy.length} non-running in namespace ${String(obj.namespace || 'all')}.`,
+      highlights: {
+        namespace: obj.namespace || 'all',
+        nonRunning: unhealthy.slice(0, 5).map((pod) => pod.name),
+      },
+      itemCount: pods.length,
+      resultId,
+      hasErrors: unhealthy.length > 0,
+      services,
+      healthStatus:
+        unhealthy.length === 0 ? 'healthy' : unhealthy.length > 2 ? 'critical' : 'degraded',
+    };
+  }
+
+  if (Array.isArray(obj.deployments)) {
+    const deployments = obj.deployments as Array<Record<string, unknown>>;
+    const notReady = deployments.filter((dep) => {
+      const ready = String(dep.ready || '');
+      const [current, desired] = ready.split('/');
+      return Number(current) < Number(desired);
+    });
+    return {
+      summary: `Kubernetes deployments: ${deployments.length} total, ${notReady.length} not fully ready in namespace ${String(obj.namespace || 'all')}.`,
+      highlights: {
+        namespace: obj.namespace || 'all',
+        notReady: notReady.slice(0, 5).map((dep) => dep.name),
+      },
+      itemCount: deployments.length,
+      resultId,
+      hasErrors: notReady.length > 0,
+      services,
+      healthStatus:
+        notReady.length === 0 ? 'healthy' : notReady.length > 2 ? 'critical' : 'degraded',
+    };
+  }
+
+  if (Array.isArray(obj.nodes)) {
+    const nodes = obj.nodes as Array<Record<string, unknown>>;
+    const notReady = nodes.filter((node) => String(node.status || '').toLowerCase() !== 'ready');
+    return {
+      summary: `Kubernetes nodes: ${nodes.length} total, ${notReady.length} not ready.`,
+      highlights: {
+        notReady: notReady.slice(0, 5).map((node) => node.name),
+      },
+      itemCount: nodes.length,
+      resultId,
+      hasErrors: notReady.length > 0,
+      services,
+      healthStatus:
+        notReady.length === 0 ? 'healthy' : notReady.length > 1 ? 'critical' : 'degraded',
+    };
+  }
+
+  if (Array.isArray(obj.topPods)) {
+    const topPods = obj.topPods as Array<Record<string, unknown>>;
+    return {
+      summary: `Kubernetes top pods: ${topPods.length} sample(s) in namespace ${String(obj.namespace || 'all')}.`,
+      highlights: {
+        namespace: obj.namespace || 'all',
+        samples: topPods.slice(0, 3).map((pod) => ({
+          name: pod.name,
+          cpu: pod.cpu,
+          memory: pod.memory,
+        })),
+      },
+      itemCount: topPods.length,
+      resultId,
+      hasErrors: false,
+      services,
+      healthStatus: 'unknown',
+    };
+  }
+
+  if (Array.isArray(obj.topNodes)) {
+    const topNodes = obj.topNodes as Array<Record<string, unknown>>;
+    return {
+      summary: `Kubernetes top nodes: ${topNodes.length} sample(s).`,
+      highlights: {
+        samples: topNodes.slice(0, 3).map((node) => ({
+          name: node.name,
+          cpuPercent: node.cpuPercent,
+          memoryPercent: node.memoryPercent,
+        })),
+      },
+      itemCount: topNodes.length,
+      resultId,
+      hasErrors: false,
+      services,
+      healthStatus: 'unknown',
+    };
+  }
+
+  if (Array.isArray(obj.events)) {
+    const events = obj.events as Array<Record<string, unknown>>;
+    const warningCount = events.filter((event) =>
+      ['warning', 'error'].includes(String(event.type || '').toLowerCase())
+    ).length;
+    return {
+      summary: `Kubernetes events: ${events.length} total, ${warningCount} warning/error in namespace ${String(obj.namespace || 'all')}.`,
+      highlights: {
+        namespace: obj.namespace || 'all',
+        warningEvents: events
+          .filter((event) => ['warning', 'error'].includes(String(event.type || '').toLowerCase()))
+          .slice(0, 3)
+          .map((event) => event.reason || event.message),
+      },
+      itemCount: events.length,
+      resultId,
+      hasErrors: warningCount > 0,
+      services,
+      healthStatus: warningCount === 0 ? 'healthy' : 'degraded',
+    };
+  }
+
+  if (Array.isArray(obj.namespaces)) {
+    const namespaces = obj.namespaces as string[];
+    return {
+      summary: `Kubernetes namespaces: ${namespaces.length} total.`,
+      highlights: {
+        namespaces: namespaces.slice(0, 10),
+      },
+      itemCount: namespaces.length,
+      resultId,
+      hasErrors: false,
+      services,
+      healthStatus: 'unknown',
+    };
+  }
+
+  if (Array.isArray(obj.contexts)) {
+    const contexts = obj.contexts as string[];
+    return {
+      summary: `Kubernetes contexts: ${contexts.length} available. Current: ${String(obj.currentContext || 'unknown')}.`,
+      highlights: {
+        currentContext: obj.currentContext,
+        contexts: contexts.slice(0, 10),
+      },
+      itemCount: contexts.length,
+      resultId,
+      hasErrors: false,
+      services,
+      healthStatus: 'unknown',
+    };
+  }
+
+  if (typeof obj.available === 'boolean') {
+    return {
+      summary: `Kubernetes cluster status: ${obj.available ? 'available' : 'unavailable'}.`,
+      highlights: {
+        available: obj.available,
+        currentContext: obj.currentContext,
+        clusterInfo: obj.clusterInfo,
+      },
+      itemCount: 1,
+      resultId,
+      hasErrors: !obj.available,
+      services,
+      healthStatus: obj.available ? 'healthy' : 'critical',
+    };
+  }
+
+  return {
+    summary: `Kubernetes ${action} query completed`,
+    highlights: {},
+    itemCount: typeof obj.count === 'number' ? obj.count : 1,
+    resultId,
+    hasErrors: hasErrorSignals(result),
+    services,
+    healthStatus: determineHealthStatus(result),
+  };
+}
+
+/**
+ * Summarizer for github_query and gitlab_query results.
+ */
+function summarizeCodeFixCandidates(
+  result: unknown,
+  args: Record<string, unknown>,
+  provider: 'github' | 'gitlab'
+): CompactToolResult {
+  const resultId = generateResultId(provider, Date.now());
+  const services = extractServices(result);
+  const query = (args.query as string) || String((result as Record<string, unknown>)?.query || '');
+
+  if (!result || typeof result !== 'object') {
+    return {
+      summary: `${provider} query completed`,
+      highlights: {},
+      itemCount: 0,
+      resultId,
+      hasErrors: false,
+      services,
+      healthStatus: 'unknown',
+    };
+  }
+
+  const obj = result as Record<string, unknown>;
+  if (typeof obj.error === 'string' && obj.error.trim().length > 0) {
+    return {
+      summary: `${provider} query failed: ${obj.error}`,
+      highlights: {
+        hint: obj.hint,
+      },
+      itemCount: 0,
+      resultId,
+      hasErrors: true,
+      services,
+      healthStatus: 'critical',
+    };
+  }
+
+  const candidates = Array.isArray(obj.candidates)
+    ? (obj.candidates as Array<Record<string, unknown>>)
+    : [];
+  const warnings = Array.isArray(obj.warnings) ? obj.warnings.map(String) : [];
+  const byType: Record<string, number> = {};
+  for (const candidate of candidates) {
+    const type = String(candidate.type || 'unknown');
+    byType[type] = (byType[type] || 0) + 1;
+  }
+
+  const target = obj.repository || obj.project || 'configured repository';
+  const providerLabel = provider === 'github' ? 'GitHub' : 'GitLab';
+
+  return {
+    summary: `${providerLabel} fix candidates for "${query}": ${candidates.length} candidate(s) in ${String(target)}.${warnings.length > 0 ? ` ${warnings.length} warning(s).` : ''}`,
+    highlights: {
+      target,
+      byType,
+      topCandidates: candidates.slice(0, 5).map((candidate) => ({
+        type: candidate.type,
+        title: candidate.title,
+        path: candidate.path,
+        url: candidate.url,
+      })),
+      warnings: warnings.slice(0, 3),
+    },
+    itemCount: candidates.length,
+    resultId,
+    hasErrors: warnings.length > 0 && candidates.length === 0,
+    services,
+    healthStatus: warnings.length > 0 && candidates.length === 0 ? 'degraded' : 'unknown',
+  };
+}
+
+/**
+ * Summarizer for opsgenie_get_incident results.
+ */
+function summarizeOpsgenieIncident(
+  result: unknown,
+  _args: Record<string, unknown>
+): CompactToolResult {
+  const resultId = generateResultId('og_inc', Date.now());
+  const services = extractServices(result);
+
+  if (!result || typeof result !== 'object') {
+    return {
+      summary: 'OpsGenie incident retrieved',
+      highlights: {},
+      itemCount: 1,
+      resultId,
+      hasErrors: false,
+      services,
+      healthStatus: 'unknown',
+    };
+  }
+
+  const obj = result as Record<string, unknown>;
+  if (typeof obj.error === 'string' && obj.error.trim().length > 0) {
+    return {
+      summary: `OpsGenie incident lookup failed: ${obj.error}`,
+      highlights: {
+        hint: obj.hint,
+      },
+      itemCount: 0,
+      resultId,
+      hasErrors: true,
+      services,
+      healthStatus: 'critical',
+    };
+  }
+
+  const incident =
+    obj.incident && typeof obj.incident === 'object'
+      ? (obj.incident as Record<string, unknown>)
+      : {};
+  const status = String(incident.status || 'unknown');
+  const priority = String(incident.priority || 'unknown');
+  const message = String(incident.message || 'OpsGenie incident');
+  const impactedServices = Array.isArray(incident.impactedServices)
+    ? incident.impactedServices.map(String)
+    : [];
+
+  return {
+    summary: `OpsGenie incident "${message.slice(0, 60)}": ${status} (${priority}).`,
+    highlights: {
+      id: incident.id,
+      tinyId: incident.tinyId,
+      status,
+      priority,
+      impactedServices,
+      tags: incident.tags,
+    },
+    itemCount: 1,
+    resultId,
+    hasErrors: status !== 'resolved',
+    services: Array.from(new Set([...services, ...impactedServices])),
+    healthStatus: status === 'resolved' ? 'healthy' : priority === 'P1' ? 'critical' : 'degraded',
+  };
+}
+
+/**
+ * Summarizer for opsgenie_list_incidents results.
+ */
+function summarizeOpsgenieIncidents(
+  result: unknown,
+  _args: Record<string, unknown>
+): CompactToolResult {
+  const resultId = generateResultId('og_list', Date.now());
+  const services = extractServices(result);
+
+  if (!result || typeof result !== 'object') {
+    return {
+      summary: 'OpsGenie incidents listed',
+      highlights: {},
+      itemCount: 0,
+      resultId,
+      hasErrors: false,
+      services,
+      healthStatus: 'unknown',
+    };
+  }
+
+  const obj = result as Record<string, unknown>;
+  if (typeof obj.error === 'string' && obj.error.trim().length > 0) {
+    return {
+      summary: `OpsGenie incident list failed: ${obj.error}`,
+      highlights: {
+        hint: obj.hint,
+      },
+      itemCount: 0,
+      resultId,
+      hasErrors: true,
+      services,
+      healthStatus: 'critical',
+    };
+  }
+
+  const incidents = Array.isArray(obj.incidents)
+    ? (obj.incidents as Array<Record<string, unknown>>)
+    : [];
+  const openCount = incidents.filter(
+    (incident) => String(incident.status || '').toLowerCase() !== 'resolved'
+  ).length;
+
+  return {
+    summary: `OpsGenie incidents: ${incidents.length} total, ${openCount} open.`,
+    highlights: {
+      open: openCount,
+      sample: incidents.slice(0, 5).map((incident) => ({
+        id: incident.id,
+        status: incident.status,
+        priority: incident.priority,
+        message: incident.message,
+      })),
+    },
+    itemCount: incidents.length,
+    resultId,
+    hasErrors: openCount > 0,
+    services,
+    healthStatus: openCount === 0 ? 'healthy' : openCount > 2 ? 'critical' : 'degraded',
+  };
+}
+
+/**
  * Default summarizer for unknown tools.
  */
 function summarizeDefault(
@@ -724,8 +1143,13 @@ const SUMMARIZERS: Record<string, ToolSummarizerFn> = {
   aws_query: summarizeAwsQuery,
   cloudwatch_alarms: summarizeCloudwatchAlarms,
   cloudwatch_logs: summarizeCloudwatchLogs,
+  kubernetes_query: summarizeKubernetesQuery,
+  github_query: (result, args) => summarizeCodeFixCandidates(result, args, 'github'),
+  gitlab_query: (result, args) => summarizeCodeFixCandidates(result, args, 'gitlab'),
   pagerduty_get_incident: summarizePagerdutyIncident,
   pagerduty_list_incidents: summarizePagerdutyList,
+  opsgenie_get_incident: summarizeOpsgenieIncident,
+  opsgenie_list_incidents: summarizeOpsgenieIncidents,
   datadog: summarizeDatadog,
   prometheus: summarizePrometheus,
   search_knowledge: summarizeKnowledgeSearch,
