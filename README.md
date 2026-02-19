@@ -7,7 +7,7 @@
 |  _ <| |_| | | | | |_) | (_) | (_) |   < / ___ \ | |
 |_| \_\\__,_|_| |_|_.__/ \___/ \___/|_|\_/_/   \_\___|
 
-             Your AI SRE, always on call
+ Scale AI-assisted development without scaling operational risk.
 ```
 
 [![CI](https://github.com/Runbook-Agent/RunbookAI/actions/workflows/ci.yml/badge.svg)](https://github.com/Runbook-Agent/RunbookAI/actions/workflows/ci.yml)
