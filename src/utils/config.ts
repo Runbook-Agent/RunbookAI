@@ -197,6 +197,12 @@ const IntegrationsConfigSchema = z.object({
   claude: ClaudeIntegrationSchema.default({}),
 });
 
+const ChangeIntelligenceConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  baseUrl: z.string().default('http://localhost:3001'),
+  apiKey: z.string().optional(),
+});
+
 const ConfigSchema = z.object({
   llm: LLMConfigSchema.default({}),
   providers: z
@@ -206,6 +212,7 @@ const ConfigSchema = z.object({
       github: GitHubConfigSchema.default({}),
       gitlab: GitLabConfigSchema.default({}),
       operabilityContext: OperabilityContextConfigSchema.default({}),
+      changeIntelligence: ChangeIntelligenceConfigSchema.default({}),
     })
     .default({}),
   incident: IncidentConfigSchema.default({}),

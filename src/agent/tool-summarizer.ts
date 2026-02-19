@@ -720,6 +720,99 @@ function summarizeDefault(
 // Registry of Summarizers
 // ============================================================================
 
+function summarizeCorrelateChanges(result: unknown): CompactToolResult {
+  const resultId = `correlate_changes_${Date.now()}`;
+  const obj = result as Record<string, unknown> | null;
+  if (!obj || obj.error) {
+    return {
+      summary: 'correlate_changes: no results',
+      highlights: {},
+      itemCount: 0,
+      resultId,
+      hasErrors: !!obj?.error,
+      services: [],
+      healthStatus: 'unknown',
+    };
+  }
+  const correlations = (obj.correlations || obj) as Array<Record<string, unknown>>;
+  if (!Array.isArray(correlations) || correlations.length === 0) {
+    return {
+      summary: 'correlate_changes: no correlated changes found',
+      highlights: {},
+      itemCount: 0,
+      resultId,
+      hasErrors: false,
+      services: [],
+      healthStatus: 'healthy',
+    };
+  }
+  const top3 = correlations.slice(0, 3);
+  const highlights: Record<string, string> = {};
+  const services: string[] = [];
+  for (const c of top3) {
+    const event = (c.changeEvent as Record<string, unknown>) || c;
+    const svc = (event.service as string) || 'unknown';
+    const score = typeof c.correlationScore === 'number' ? c.correlationScore.toFixed(2) : '?';
+    const summary = (event.summary as string) || (event.changeType as string) || 'change';
+    highlights[svc] = `score=${score}: ${summary}`;
+    if (!services.includes(svc)) services.push(svc);
+  }
+  return {
+    summary: `correlate_changes: ${correlations.length} correlated change(s)`,
+    highlights,
+    itemCount: correlations.length,
+    resultId,
+    hasErrors: false,
+    services,
+    healthStatus: 'unknown',
+  };
+}
+
+function summarizeQueryChangeEvents(result: unknown): CompactToolResult {
+  const resultId = `query_change_events_${Date.now()}`;
+  const events = Array.isArray(result) ? result : [];
+  if (events.length === 0) {
+    return {
+      summary: 'query_change_events: no changes found',
+      highlights: {},
+      itemCount: 0,
+      resultId,
+      hasErrors: false,
+      services: [],
+      healthStatus: 'healthy',
+    };
+  }
+  const byType: Record<string, number> = {};
+  const services: string[] = [];
+  for (const e of events) {
+    const evt = e as Record<string, unknown>;
+    const ct = (evt.changeType as string) || 'unknown';
+    byType[ct] = (byType[ct] || 0) + 1;
+    const svc = evt.service as string;
+    if (svc && !services.includes(svc)) services.push(svc);
+  }
+  const typeSummary = Object.entries(byType)
+    .map(([k, v]) => `${k}:${v}`)
+    .join(', ');
+  const highlights: Record<string, string> = { types: typeSummary };
+  const deployments = events.filter(
+    (e: unknown) => (e as Record<string, unknown>).changeType === 'deployment'
+  );
+  if (deployments.length > 0) {
+    const recent = deployments[0] as Record<string, unknown>;
+    highlights.recentDeploy = `${recent.service}: ${recent.summary}`;
+  }
+  return {
+    summary: `query_change_events: ${events.length} change(s) — ${typeSummary}`,
+    highlights,
+    itemCount: events.length,
+    resultId,
+    hasErrors: false,
+    services,
+    healthStatus: 'unknown',
+  };
+}
+
 const SUMMARIZERS: Record<string, ToolSummarizerFn> = {
   aws_query: summarizeAwsQuery,
   cloudwatch_alarms: summarizeCloudwatchAlarms,
@@ -729,6 +822,8 @@ const SUMMARIZERS: Record<string, ToolSummarizerFn> = {
   datadog: summarizeDatadog,
   prometheus: summarizePrometheus,
   search_knowledge: summarizeKnowledgeSearch,
+  correlate_changes: summarizeCorrelateChanges,
+  query_change_events: summarizeQueryChangeEvents,
 };
 
 // ============================================================================

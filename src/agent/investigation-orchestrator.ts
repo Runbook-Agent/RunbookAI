@@ -943,6 +943,11 @@ export class InvestigationOrchestrator {
     // Try to gather some initial context from tools
     const triageSources: Array<{ tool: string; params: Record<string, unknown>; label: string }> = [
       {
+        tool: 'correlate_changes',
+        params: { affected_services: [], window_minutes: 120 },
+        label: 'Correlated Recent Changes',
+      },
+      {
         tool: 'search_knowledge',
         params: {
           query: this.buildKnowledgeSearchQuery(query),

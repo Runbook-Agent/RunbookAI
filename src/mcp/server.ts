@@ -173,6 +173,51 @@ export const MCP_TOOLS: MCPTool[] = [
       },
     },
   },
+  {
+    name: 'query_changes',
+    description:
+      'Query recent change events (deployments, config changes, migrations) from the Change Intelligence Service. Returns a list of changes with metadata.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        services: {
+          type: 'array',
+          description: 'Filter by service names',
+          items: { type: 'string', description: 'Service name' },
+        },
+        since_minutes: {
+          type: 'number',
+          description: 'Only show changes from the last N minutes (default: 60)',
+          default: 60,
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of results (default: 10)',
+          default: 10,
+        },
+      },
+    },
+  },
+  {
+    name: 'predict_change_impact',
+    description:
+      'Predict the blast radius and risk level of a change using the service dependency graph. Shows directly and transitively affected services.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        services: {
+          type: 'array',
+          description: 'Services being changed',
+          items: { type: 'string', description: 'Service name' },
+        },
+        change_type: {
+          type: 'string',
+          description: 'Type of change (deployment, config_change, db_migration, etc.)',
+        },
+      },
+      required: ['services'],
+    },
+  },
 ];
 
 /**
@@ -381,6 +426,123 @@ async function handleListServices(
 }
 
 /**
+ * Handle query_changes tool call — delegates to Change Intelligence Service
+ */
+async function handleQueryChanges(args: Record<string, unknown>): Promise<MCPToolCallResponse> {
+  const { createChangeIntelligenceAdapter } =
+    await import('../providers/change-intelligence/adapter');
+  const { loadConfig } = await import('../utils/config');
+
+  try {
+    const config = await loadConfig();
+    const adapter = createChangeIntelligenceAdapter(config.providers.changeIntelligence);
+    if (!adapter) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Change Intelligence Service is not configured. Enable it in .runbook/config.yaml under providers.changeIntelligence.',
+          },
+        ],
+      };
+    }
+
+    const sinceMinutes = typeof args.since_minutes === 'number' ? args.since_minutes : 60;
+    const since = new Date(Date.now() - sinceMinutes * 60_000).toISOString();
+    const services = Array.isArray(args.services) ? args.services.map(String) : undefined;
+    const limit = typeof args.limit === 'number' ? args.limit : 10;
+
+    const events = await adapter.queryEvents({ services, since, limit });
+
+    if (events.length === 0) {
+      return { content: [{ type: 'text', text: 'No recent changes found.' }] };
+    }
+
+    const lines = [`## Recent Changes (${events.length})\n`];
+    for (const event of events) {
+      lines.push(`### ${event.summary}`);
+      lines.push(`- **Service:** ${event.service}`);
+      lines.push(`- **Type:** ${event.changeType}`);
+      lines.push(`- **Status:** ${event.status}`);
+      lines.push(`- **Time:** ${event.timestamp}`);
+      if (event.commitSha) lines.push(`- **Commit:** ${event.commitSha.slice(0, 8)}`);
+      lines.push('');
+    }
+
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error querying changes: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Handle predict_change_impact tool call — delegates to Change Intelligence Service
+ */
+async function handlePredictChangeImpact(
+  args: Record<string, unknown>
+): Promise<MCPToolCallResponse> {
+  const { createChangeIntelligenceAdapter } =
+    await import('../providers/change-intelligence/adapter');
+  const { loadConfig } = await import('../utils/config');
+
+  try {
+    const config = await loadConfig();
+    const adapter = createChangeIntelligenceAdapter(config.providers.changeIntelligence);
+    if (!adapter) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Change Intelligence Service is not configured. Enable it in .runbook/config.yaml under providers.changeIntelligence.',
+          },
+        ],
+      };
+    }
+
+    const services = Array.isArray(args.services) ? args.services.map(String) : [];
+    const changeType = typeof args.change_type === 'string' ? args.change_type : undefined;
+
+    const prediction = await adapter.predictBlastRadius(services, changeType);
+
+    const lines = ['## Blast Radius Prediction\n'];
+    lines.push(`**Risk Level:** ${prediction.riskLevel}`);
+    lines.push(`**Critical Path Affected:** ${prediction.criticalPathAffected ? 'Yes' : 'No'}`);
+    if (prediction.directServices.length > 0) {
+      lines.push(`\n### Direct Dependencies (${prediction.directServices.length})`);
+      for (const svc of prediction.directServices) lines.push(`- ${svc}`);
+    }
+    if (prediction.downstreamServices.length > 0) {
+      lines.push(`\n### Downstream Services (${prediction.downstreamServices.length})`);
+      for (const svc of prediction.downstreamServices) lines.push(`- ${svc}`);
+    }
+    if (prediction.rationale.length > 0) {
+      lines.push('\n### Rationale');
+      for (const r of prediction.rationale) lines.push(`- ${r}`);
+    }
+
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error predicting impact: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
  * MCP Server class
  */
 export class MCPServer {
@@ -430,6 +592,10 @@ export class MCPServer {
           return await handleGetKnowledgeStats(retriever);
         case 'list_services':
           return await handleListServices(request.arguments, retriever);
+        case 'query_changes':
+          return await handleQueryChanges(request.arguments);
+        case 'predict_change_impact':
+          return await handlePredictChangeImpact(request.arguments);
         default:
           return {
             content: [

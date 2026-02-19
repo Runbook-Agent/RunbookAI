@@ -2460,5 +2460,275 @@ checkpoint
     }
   );
 
+// Change Intelligence commands
+const changes = program
+  .command('changes')
+  .description('Change intelligence — track and correlate changes');
+
+changes
+  .command('list')
+  .description('List recent change events')
+  .option('-s, --service <service>', 'Filter by service')
+  .option('-t, --type <type>', 'Filter by change type')
+  .option('--since <minutes>', 'Show changes from last N minutes', '60')
+  .option('-l, --limit <count>', 'Maximum results', '20')
+  .action(async (options: { service?: string; type?: string; since: string; limit: string }) => {
+    const { createChangeIntelligenceAdapter } =
+      await import('./providers/change-intelligence/adapter');
+    const config = await loadConfig();
+    const adapter = createChangeIntelligenceAdapter(config.providers.changeIntelligence);
+    if (!adapter) {
+      console.error(
+        chalk.red(
+          'Change Intelligence is not enabled. Set providers.changeIntelligence.enabled: true in config.'
+        )
+      );
+      process.exit(1);
+    }
+    try {
+      const since = new Date(Date.now() - parseInt(options.since, 10) * 60_000).toISOString();
+      const events = await adapter.queryEvents({
+        services: options.service ? [options.service] : undefined,
+        changeTypes: options.type ? [options.type] : undefined,
+        since,
+        limit: parseInt(options.limit, 10),
+      });
+      if (events.length === 0) {
+        console.log(chalk.yellow('No changes found.'));
+        return;
+      }
+      console.log(chalk.cyan(`\nRecent Changes (${events.length}):\n`));
+      for (const event of events) {
+        const time = new Date(event.timestamp).toLocaleString();
+        const risk = event.blastRadius?.riskLevel ? ` [${event.blastRadius.riskLevel}]` : '';
+        console.log(
+          `  ${chalk.green(event.service)} ${chalk.gray(event.changeType)}${chalk.yellow(risk)}`
+        );
+        console.log(`    ${event.summary}`);
+        console.log(`    ${chalk.gray(time)} ${chalk.gray(event.status)}`);
+        console.log();
+      }
+    } catch (error) {
+      console.error(chalk.red(`Failed: ${error instanceof Error ? error.message : String(error)}`));
+      process.exit(1);
+    }
+  });
+
+changes
+  .command('register')
+  .description('Register a change event')
+  .requiredOption('-s, --service <service>', 'Service name')
+  .option('-t, --type <type>', 'Change type', 'deployment')
+  .requiredOption('--summary <summary>', 'Change summary')
+  .option('-e, --environment <env>', 'Environment', 'production')
+  .option('--commit <sha>', 'Commit SHA')
+  .action(
+    async (options: {
+      service: string;
+      type: string;
+      summary: string;
+      environment: string;
+      commit?: string;
+    }) => {
+      const { createChangeIntelligenceAdapter } =
+        await import('./providers/change-intelligence/adapter');
+      const config = await loadConfig();
+      const adapter = createChangeIntelligenceAdapter(config.providers.changeIntelligence);
+      if (!adapter) {
+        console.error(chalk.red('Change Intelligence is not enabled.'));
+        process.exit(1);
+      }
+      try {
+        const event = await adapter.registerEvent({
+          service: options.service,
+          changeType: options.type,
+          summary: options.summary,
+          environment: options.environment,
+          commitSha: options.commit,
+          source: 'manual',
+          initiator: 'human',
+        });
+        console.log(chalk.green(`Change registered: ${event.id}`));
+        if (event.blastRadius) {
+          console.log(
+            chalk.gray(
+              `  Blast radius: ${event.blastRadius.riskLevel} — ${event.blastRadius.directServices.length} direct, ${event.blastRadius.downstreamServices.length} downstream`
+            )
+          );
+        }
+      } catch (error) {
+        console.error(
+          chalk.red(`Failed: ${error instanceof Error ? error.message : String(error)}`)
+        );
+        process.exit(1);
+      }
+    }
+  );
+
+changes
+  .command('correlate')
+  .description('Correlate changes with an incident')
+  .requiredOption('-s, --services <services...>', 'Affected service names')
+  .option('--time <iso>', 'Incident time (ISO format, defaults to now)')
+  .option('-w, --window <minutes>', 'Time window in minutes', '120')
+  .action(async (options: { services: string[]; time?: string; window: string }) => {
+    const { createChangeIntelligenceAdapter } =
+      await import('./providers/change-intelligence/adapter');
+    const config = await loadConfig();
+    const adapter = createChangeIntelligenceAdapter(config.providers.changeIntelligence);
+    if (!adapter) {
+      console.error(chalk.red('Change Intelligence is not enabled.'));
+      process.exit(1);
+    }
+    try {
+      const result = await adapter.correlateWithIncident(
+        options.services,
+        options.time,
+        parseInt(options.window, 10)
+      );
+      if (result.correlations.length === 0) {
+        console.log(chalk.yellow('No correlated changes found.'));
+        return;
+      }
+      console.log(chalk.cyan(`\nCorrelated Changes (${result.correlations.length}):\n`));
+      for (const c of result.correlations) {
+        const score = (c.correlationScore * 100).toFixed(0);
+        console.log(
+          `  ${chalk.green(c.changeEvent.service)} ${chalk.yellow(`${score}%`)} — ${c.changeEvent.summary}`
+        );
+        console.log(`    ${chalk.gray(c.correlationReasons.slice(0, 3).join('; '))}`);
+        console.log();
+      }
+    } catch (error) {
+      console.error(chalk.red(`Failed: ${error instanceof Error ? error.message : String(error)}`));
+      process.exit(1);
+    }
+  });
+
+changes
+  .command('blast-radius')
+  .description('Predict blast radius for a change')
+  .requiredOption('-s, --services <services...>', 'Services being changed')
+  .option('-t, --type <type>', 'Change type')
+  .action(async (options: { services: string[]; type?: string }) => {
+    const { createChangeIntelligenceAdapter } =
+      await import('./providers/change-intelligence/adapter');
+    const config = await loadConfig();
+    const adapter = createChangeIntelligenceAdapter(config.providers.changeIntelligence);
+    if (!adapter) {
+      console.error(chalk.red('Change Intelligence is not enabled.'));
+      process.exit(1);
+    }
+    try {
+      const prediction = await adapter.predictBlastRadius(options.services, options.type);
+      console.log(chalk.cyan('\nBlast Radius Prediction:\n'));
+      const riskColors: Record<string, typeof chalk.red> = {
+        critical: chalk.red,
+        high: chalk.yellow,
+        medium: chalk.hex('#FFA500'),
+        low: chalk.green,
+      };
+      const colorFn = riskColors[prediction.riskLevel] || chalk.gray;
+      console.log(`  Risk Level: ${colorFn(prediction.riskLevel.toUpperCase())}`);
+      console.log(
+        `  Critical Path: ${prediction.criticalPathAffected ? chalk.red('YES') : chalk.green('No')}`
+      );
+      if (prediction.directServices.length > 0) {
+        console.log(
+          `  Direct (${prediction.directServices.length}): ${prediction.directServices.join(', ')}`
+        );
+      }
+      if (prediction.downstreamServices.length > 0) {
+        console.log(
+          `  Downstream (${prediction.downstreamServices.length}): ${prediction.downstreamServices.join(', ')}`
+        );
+      }
+      console.log();
+      for (const r of prediction.rationale) {
+        console.log(`  ${chalk.gray('•')} ${r}`);
+      }
+      console.log();
+    } catch (error) {
+      console.error(chalk.red(`Failed: ${error instanceof Error ? error.message : String(error)}`));
+      process.exit(1);
+    }
+  });
+
+changes
+  .command('velocity')
+  .description('Show change velocity for a service')
+  .requiredOption('-s, --service <service>', 'Service name')
+  .option('-w, --window <minutes>', 'Time window in minutes', '60')
+  .option('-p, --periods <count>', 'Number of periods for trend')
+  .action(async (options: { service: string; window: string; periods?: string }) => {
+    const { createChangeIntelligenceAdapter } =
+      await import('./providers/change-intelligence/adapter');
+    const config = await loadConfig();
+    const adapter = createChangeIntelligenceAdapter(config.providers.changeIntelligence);
+    if (!adapter) {
+      console.error(chalk.red('Change Intelligence is not enabled.'));
+      process.exit(1);
+    }
+    try {
+      const result = await adapter.getVelocity(
+        options.service,
+        parseInt(options.window, 10),
+        options.periods ? parseInt(options.periods, 10) : undefined
+      );
+
+      if ('trend' in result) {
+        console.log(
+          chalk.cyan(
+            `\nChange Velocity Trend for ${options.service} (${(result as { trend: unknown[] }).trend.length} periods):\n`
+          )
+        );
+        for (const period of (
+          result as {
+            trend: Array<{
+              windowStart: string;
+              windowEnd: string;
+              changeCount: number;
+              changeTypes: Record<string, number>;
+            }>;
+          }
+        ).trend) {
+          const start = new Date(period.windowStart).toLocaleString();
+          const end = new Date(period.windowEnd).toLocaleString();
+          const types = Object.entries(period.changeTypes)
+            .map(([k, v]) => `${k}:${v}`)
+            .join(', ');
+          console.log(
+            `  ${chalk.gray(start)} → ${chalk.gray(end)}: ${chalk.green(String(period.changeCount))} changes${types ? ` (${types})` : ''}`
+          );
+        }
+      } else {
+        const velocity = result as {
+          changeCount: number;
+          changeTypes: Record<string, number>;
+          averageIntervalMinutes: number;
+          windowStart: string;
+          windowEnd: string;
+        };
+        console.log(chalk.cyan(`\nChange Velocity for ${options.service}:\n`));
+        console.log(`  Changes: ${chalk.green(String(velocity.changeCount))}`);
+        if (velocity.averageIntervalMinutes > 0) {
+          console.log(
+            `  Avg interval: ${chalk.gray(velocity.averageIntervalMinutes.toFixed(1) + ' min')}`
+          );
+        }
+        const types = Object.entries(velocity.changeTypes)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(', ');
+        if (types) {
+          console.log(`  By type: ${types}`);
+        }
+      }
+      console.log();
+    } catch (error) {
+      console.error(chalk.red(`Failed: ${error instanceof Error ? error.message : String(error)}`));
+      process.exit(1);
+    }
+  });
+
 // Parse and run
 program.parse();

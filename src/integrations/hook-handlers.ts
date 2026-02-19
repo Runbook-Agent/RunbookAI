@@ -418,15 +418,84 @@ export async function handlePreToolUse(
 
 /**
  * Hook handler for PostToolUse events
- * Can track tool usage for learning
+ * Detects mutations and registers them as change events in the Change Intelligence Service.
  */
 export async function handlePostToolUse(
   payload: HookPayload,
   config: HookHandlerConfig = DEFAULT_CONFIG
 ): Promise<HookResponse> {
-  // For now, just log tool usage for future analysis
-  // This could be expanded to track runbook step execution
+  // Detect mutation-like tool usage and register as change events
+  try {
+    const changeEvent = detectChangeEvent(payload);
+    if (changeEvent) {
+      await registerChangeEvent(changeEvent);
+    }
+  } catch {
+    // Fail silently — change intelligence is optional
+  }
   return {};
+}
+
+function detectChangeEvent(payload: HookPayload): Record<string, unknown> | null {
+  const toolName = payload.tool_name;
+  const toolInput = payload.tool_input || {};
+
+  // Detect aws_mutate tool
+  if (toolName === 'aws_mutate') {
+    return {
+      service: (toolInput.service as string) || 'aws',
+      changeType: 'infra_modification',
+      source: 'claude_hook',
+      initiator: 'agent',
+      summary: `AWS mutation via ${toolInput.action || 'unknown action'} on ${toolInput.service || 'unknown'}`,
+      environment: 'production',
+      metadata: { tool: toolName, input: toolInput },
+    };
+  }
+
+  // Detect deploy-like bash commands
+  if (toolName === 'bash' || toolName === 'Bash') {
+    const command = (toolInput.command as string) || '';
+    const deployPatterns = [
+      /kubectl\s+(apply|rollout|set\s+image)/,
+      /aws\s+ecs\s+update-service/,
+      /aws\s+lambda\s+update-function/,
+      /terraform\s+apply/,
+      /docker\s+push/,
+      /helm\s+(install|upgrade)/,
+    ];
+    for (const pattern of deployPatterns) {
+      if (pattern.test(command)) {
+        return {
+          service: 'unknown',
+          changeType: 'deployment',
+          source: 'claude_hook',
+          initiator: 'agent',
+          summary: `Deploy-like command: ${command.slice(0, 200)}`,
+          environment: 'production',
+          metadata: { tool: toolName, command: command.slice(0, 500) },
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+async function registerChangeEvent(event: Record<string, unknown>): Promise<void> {
+  const baseUrl = process.env.CHANGE_INTEL_URL || 'http://localhost:3001';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
+  try {
+    await fetch(`${baseUrl}/api/v1/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**

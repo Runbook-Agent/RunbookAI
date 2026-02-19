@@ -11,6 +11,13 @@ const AWS_TOOLS = new Set([
   'cloudwatch_logs',
 ]);
 
+const CHANGE_INTELLIGENCE_TOOLS = new Set([
+  'query_change_events',
+  'correlate_changes',
+  'predict_blast_radius',
+  'get_change_velocity',
+]);
+
 const CLOUDWATCH_TOOLS = new Set(['cloudwatch_alarms', 'cloudwatch_logs']);
 
 /**
@@ -61,6 +68,9 @@ export async function getRuntimeTools(config: Config, tools: Tool[]): Promise<To
       return false;
     }
     if (tool.name === 'prometheus' && !prometheusEnabled) {
+      return false;
+    }
+    if (!config.providers.changeIntelligence?.enabled && CHANGE_INTELLIGENCE_TOOLS.has(tool.name)) {
       return false;
     }
     return true;

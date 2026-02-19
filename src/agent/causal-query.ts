@@ -147,6 +147,16 @@ const FAILURE_PATTERNS: Record<
     keywords: ['deploy', 'release', 'rollout', 'version', 'update', 'change'],
     queries: [
       {
+        tool: 'correlate_changes',
+        parameters: { window_minutes: 120 },
+        description: 'Correlate recent changes with incident',
+      },
+      {
+        tool: 'query_change_events',
+        parameters: { since_minutes: 180, limit: 10 },
+        description: 'List recent changes',
+      },
+      {
         tool: 'aws_query',
         parameters: { services: ['ecs', 'lambda', 'codepipeline'] },
         description: 'Check recent deployments',

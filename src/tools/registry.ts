@@ -3689,3 +3689,198 @@ toolRegistry.registerCategory('diagram', 'Diagrams & Visualization', [
   visualizeMetricsTool,
   renderMermaidTool,
 ]);
+
+// Change Intelligence tools — delegate to Change Intelligence Service via HTTP adapter
+import {
+  createChangeIntelligenceAdapter,
+  type ChangeIntelligenceAdapter,
+} from '../providers/change-intelligence/adapter';
+
+let _ciAdapter: ChangeIntelligenceAdapter | null | undefined;
+
+async function getCIAdapter(): Promise<ChangeIntelligenceAdapter | null> {
+  if (_ciAdapter !== undefined) return _ciAdapter;
+  try {
+    const config = await loadConfig();
+    _ciAdapter = createChangeIntelligenceAdapter(config.providers.changeIntelligence);
+  } catch {
+    _ciAdapter = null;
+  }
+  return _ciAdapter;
+}
+
+const queryChangeEventsTool = defineTool(
+  'query_change_events',
+  `Query recent change events from the Change Intelligence Service.
+
+   Use to find recent deployments, config changes, infra modifications, etc.
+   Supports filtering by service, change type, environment, time range, and free-text search.`,
+  {
+    type: 'object',
+    properties: {
+      services: {
+        type: 'array',
+        description: 'Filter by service names',
+        items: { type: 'string' },
+      },
+      change_types: {
+        type: 'array',
+        description:
+          'Filter by change types (deployment, config_change, infra_modification, feature_flag, db_migration, rollback, scaling, security_patch)',
+        items: { type: 'string' },
+      },
+      environment: {
+        type: 'string',
+        description: 'Filter by environment (e.g. production, staging)',
+      },
+      since_minutes: {
+        type: 'number',
+        description: 'Only show changes from the last N minutes',
+      },
+      query: {
+        type: 'string',
+        description: 'Free-text search across change summaries',
+      },
+      limit: {
+        type: 'number',
+        description: 'Maximum number of results (default: 20)',
+      },
+    },
+  },
+  async (args) => {
+    const adapter = await getCIAdapter();
+    if (!adapter) return { error: 'Change Intelligence Service not configured' };
+    try {
+      const since =
+        typeof args.since_minutes === 'number'
+          ? new Date(Date.now() - (args.since_minutes as number) * 60_000).toISOString()
+          : undefined;
+      return await adapter.queryEvents({
+        services: args.services as string[] | undefined,
+        changeTypes: args.change_types as string[] | undefined,
+        environment: args.environment as string | undefined,
+        since,
+        query: args.query as string | undefined,
+        limit: (args.limit as number) || 20,
+      });
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Query failed' };
+    }
+  }
+);
+
+const correlateChangesTool = defineTool(
+  'correlate_changes',
+  `Correlate recent changes with an incident. Identifies which changes are most likely
+   related to the affected services using time proximity, service graph analysis,
+   and change risk scoring.`,
+  {
+    type: 'object',
+    properties: {
+      affected_services: {
+        type: 'array',
+        description: 'Services affected by the incident',
+        items: { type: 'string' },
+      },
+      incident_time: {
+        type: 'string',
+        description: 'ISO timestamp of the incident (defaults to now)',
+      },
+      window_minutes: {
+        type: 'number',
+        description: 'Time window to search for changes (default: 120 minutes)',
+      },
+    },
+    required: ['affected_services'],
+  },
+  async (args) => {
+    const adapter = await getCIAdapter();
+    if (!adapter) return { error: 'Change Intelligence Service not configured' };
+    try {
+      return await adapter.correlateWithIncident(
+        args.affected_services as string[],
+        args.incident_time as string | undefined,
+        args.window_minutes as number | undefined
+      );
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Correlation failed' };
+    }
+  }
+);
+
+const predictBlastRadiusTool = defineTool(
+  'predict_blast_radius',
+  `Predict the blast radius of a change. Uses the service dependency graph to identify
+   which services will be directly and transitively affected, and assesses risk level.`,
+  {
+    type: 'object',
+    properties: {
+      services: {
+        type: 'array',
+        description: 'Services being changed',
+        items: { type: 'string' },
+      },
+      change_type: {
+        type: 'string',
+        description: 'Type of change (deployment, config_change, db_migration, etc.)',
+      },
+    },
+    required: ['services'],
+  },
+  async (args) => {
+    const adapter = await getCIAdapter();
+    if (!adapter) return { error: 'Change Intelligence Service not configured' };
+    try {
+      return await adapter.predictBlastRadius(
+        args.services as string[],
+        args.change_type as string | undefined
+      );
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Prediction failed' };
+    }
+  }
+);
+
+const getChangeVelocityTool = defineTool(
+  'get_change_velocity',
+  `Get change velocity metrics for a service. Shows how frequently a service
+   is being changed, which can indicate instability or active development.`,
+  {
+    type: 'object',
+    properties: {
+      service: {
+        type: 'string',
+        description: 'Service name to check velocity for',
+      },
+      window_minutes: {
+        type: 'number',
+        description: 'Time window in minutes (default: 60)',
+      },
+      periods: {
+        type: 'number',
+        description: 'Number of periods for trend analysis (omit for single window)',
+      },
+    },
+    required: ['service'],
+  },
+  async (args) => {
+    const adapter = await getCIAdapter();
+    if (!adapter) return { error: 'Change Intelligence Service not configured' };
+    try {
+      return await adapter.getVelocity(
+        args.service as string,
+        args.window_minutes as number | undefined,
+        args.periods as number | undefined
+      );
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Velocity query failed' };
+    }
+  }
+);
+
+toolRegistry.registerCategory('change_intelligence', 'Change Intelligence', [
+  queryChangeEventsTool,
+  correlateChangesTool,
+  predictBlastRadiusTool,
+  getChangeVelocityTool,
+]);
