@@ -146,9 +146,15 @@ Setup details and operational commands are documented in:
 
 - `docs/OPERABILITY_INGESTION.md`
 
-## Next Integration Steps
+## Integration Status
 
-1. Add concrete adapters under `src/providers/operability-context/adapters/`.
-2. Wire registry construction in runtime bootstrap (`src/cli.tsx`).
-3. Add an agent tool (`operability_context_query`) backed by the registry.
-4. Extend evals to compare investigation quality with context provider enabled vs disabled.
+Completed:
+
+1. Concrete HTTP adapters implemented under `src/providers/operability-context/adapters/`.
+2. Registry construction wired in runtime bootstrap (`src/cli.tsx`).
+3. Runtime tool exposure for operability context queries gated by provider enablement.
+4. Claude hook + manual CLI ingestion with local spool and replay workflows.
+
+Remaining:
+
+1. Extend evals to compare investigation quality with operability context provider enabled vs disabled.
