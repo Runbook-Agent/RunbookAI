@@ -292,6 +292,51 @@ async function runSimple(query: string, incidentId?: string) {
   }
 }
 
+async function runAgentAsJson(
+  query: string,
+  incidentId?: string
+): Promise<{
+  query: string;
+  incidentId?: string;
+  answer: string;
+  investigationId?: string;
+  toolRuns: Array<{ tool: string; durationMs?: number; error?: string }>;
+}> {
+  const config = await loadConfig();
+  const configErrors = validateConfig(config);
+  if (configErrors.length > 0) {
+    throw new Error(configErrors.join(' | '));
+  }
+
+  const agent = await createRuntimeAgent(config);
+  const toolRuns: Array<{ tool: string; durationMs?: number; error?: string }> = [];
+  let answer = '';
+  let investigationId: string | undefined;
+
+  for await (const event of agent.run(query, incidentId)) {
+    switch (event.type) {
+      case 'tool_end':
+        toolRuns.push({ tool: event.tool, durationMs: event.durationMs });
+        break;
+      case 'tool_error':
+        toolRuns.push({ tool: event.tool, error: event.error });
+        break;
+      case 'done':
+        answer = event.answer;
+        investigationId = event.investigationId;
+        break;
+    }
+  }
+
+  return {
+    query,
+    incidentId,
+    answer,
+    investigationId,
+    toolRuns,
+  };
+}
+
 function formatInlineMarkdownForConsole(text: string): string {
   return text
     .replace(/`([^`]+)`/g, (_match, value) => chalk.yellow(String(value)))
@@ -988,6 +1033,203 @@ async function runStructuredInvestigation(
   }
 }
 
+async function runStructuredInvestigationAsJson(
+  incidentId: string,
+  autoRemediate: boolean,
+  learn: boolean,
+  applyRunbookUpdates: boolean
+): Promise<{
+  incidentId: string;
+  query: string;
+  result: Awaited<ReturnType<ReturnType<typeof createOrchestrator>['investigate']>>;
+  learning?: {
+    artifactDir: string;
+    postmortemPath: string;
+    suggestionsPath: string;
+    appliedRunbookUpdates: string[];
+    proposedRunbookUpdates: string[];
+  };
+}> {
+  const config = await loadConfig();
+  const configErrors = validateConfig(config);
+  if (configErrors.length > 0) {
+    throw new Error(configErrors.join(' | '));
+  }
+
+  const llm = createLLMClient({
+    provider: config.llm.provider,
+    model: config.llm.model,
+    apiKey: config.llm.apiKey,
+  });
+
+  await skillRegistry.loadUserSkills();
+  const runtimeSkills = skillRegistry.getAll().map((skill) => skill.id);
+  const runtimeTools = await getRuntimeTools(config, toolRegistry.getAll());
+  const toolsByName = new Map(runtimeTools.map((tool) => [tool.name, tool]));
+  const learningEvents: LearningEvent[] = [];
+  const query = `Investigate incident ${incidentId}. Identify the root cause with supporting evidence.`;
+
+  const orchestrator = createOrchestrator(
+    {
+      complete: async (prompt: string) => {
+        const response = await llm.chat(
+          'You are an SRE investigator. Return only valid JSON matching the requested schema.',
+          prompt
+        );
+        return response.content;
+      },
+    },
+    {
+      execute: async (toolName: string, parameters: Record<string, unknown>) => {
+        const tool = toolsByName.get(toolName);
+        if (!tool) {
+          throw new Error(`Tool not available in runtime: ${toolName}`);
+        }
+        return tool.execute(parameters);
+      },
+    },
+    {
+      incidentId,
+      maxIterations: config.agent.maxIterations,
+      autoApproveRemediation: autoRemediate,
+      availableTools: runtimeTools.map((tool) => tool.name),
+      availableSkills: runtimeSkills,
+      fetchRelevantRunbooks: async (context: RemediationContext) => {
+        const retriever = await createConfiguredRetriever('.runbook', config);
+        try {
+          const searchQuery = [context.rootCause, ...context.affectedServices].join(' ').trim();
+          const results = await retriever.search(
+            searchQuery || context.incidentId || 'incident remediation',
+            {
+              typeFilter: ['runbook'],
+              serviceFilter:
+                context.affectedServices.length > 0 ? context.affectedServices : undefined,
+              limit: 12,
+            }
+          );
+
+          return Array.from(
+            new Set(results.runbooks.map((runbook) => runbook.title).filter(Boolean))
+          ).slice(0, 8);
+        } finally {
+          retriever.close();
+        }
+      },
+    }
+  );
+
+  orchestrator.on((event: InvestigationEvent) => {
+    if (!learn) {
+      return;
+    }
+    switch (event.type) {
+      case 'phase_change':
+        learningEvents.push({
+          timestamp: new Date().toISOString(),
+          type: 'phase_change',
+          summary: `${formatPhaseLabel(event.phase)}: ${event.reason}`,
+          phase: event.phase,
+        });
+        break;
+      case 'triage_complete':
+        learningEvents.push({
+          timestamp: new Date().toISOString(),
+          type: 'triage_complete',
+          summary: event.result.summary,
+          phase: 'triage',
+          details: {
+            severity: event.result.severity,
+            affectedServices: event.result.affectedServices,
+            symptoms: event.result.symptoms,
+          },
+        });
+        break;
+      case 'query_executing':
+        learningEvents.push({
+          timestamp: new Date().toISOString(),
+          type: 'query_executing',
+          summary: `${event.query.tool} ${event.query.queryType}`,
+          phase: 'investigate',
+          details: { parameters: event.query.parameters },
+        });
+        break;
+      case 'query_complete':
+        learningEvents.push({
+          timestamp: new Date().toISOString(),
+          type: 'query_complete',
+          summary:
+            summarizeInvestigationQueryResult(event.result)[0] || `Completed ${event.query.tool}`,
+          phase: 'investigate',
+          details: { tool: event.query.tool },
+        });
+        break;
+      case 'conclusion_reached':
+        learningEvents.push({
+          timestamp: new Date().toISOString(),
+          type: 'conclusion_reached',
+          summary: event.conclusion.rootCause,
+          phase: 'conclude',
+          details: {
+            confidence: event.conclusion.confidence,
+            affectedServices: event.conclusion.affectedServices || [],
+          },
+        });
+        break;
+      case 'error':
+        learningEvents.push({
+          timestamp: new Date().toISOString(),
+          type: 'error',
+          summary: `${event.phase}: ${event.error.message}`,
+          phase: event.phase,
+        });
+        break;
+    }
+  });
+
+  const result = await orchestrator.investigate(query);
+
+  if (!learn) {
+    return { incidentId, query, result };
+  }
+
+  const learning = await runLearningLoop({
+    result,
+    incidentId,
+    query,
+    events: learningEvents,
+    applyRunbookUpdates,
+    complete: async (prompt: string) => {
+      const response = await llm.chat(
+        'You are an SRE postmortem and runbook improvement assistant. Return only valid JSON.',
+        prompt
+      );
+      return response.content;
+    },
+  });
+
+  if (applyRunbookUpdates && learning.appliedRunbookUpdates.length > 0) {
+    const retriever = await createConfiguredRetriever('.runbook', config);
+    try {
+      await retriever.sync();
+    } finally {
+      retriever.close();
+    }
+  }
+
+  return {
+    incidentId,
+    query,
+    result,
+    learning: {
+      artifactDir: learning.artifactDir,
+      postmortemPath: learning.postmortemPath,
+      suggestionsPath: learning.suggestionsPath,
+      appliedRunbookUpdates: learning.appliedRunbookUpdates,
+      proposedRunbookUpdates: learning.proposedRunbookUpdates,
+    },
+  };
+}
+
 function parseCsvOption(value?: string): string[] {
   if (!value) {
     return [];
@@ -1135,6 +1377,7 @@ program
   .description('Investigate a PagerDuty/OpsGenie incident')
   .option('-v, --verbose', 'Show detailed output')
   .option('--auto-remediate', 'Attempt to execute remediation steps through runtime skills')
+  .option('--json', 'Output structured JSON summary')
   .option(
     '--learn',
     'Generate postmortem draft + runbook knowledge suggestions from investigation output'
@@ -1149,6 +1392,7 @@ program
       options: {
         verbose?: boolean;
         autoRemediate?: boolean;
+        json?: boolean;
         learn?: boolean;
         applyRunbookUpdates?: boolean;
       }
@@ -1159,6 +1403,17 @@ program
       }
 
       try {
+        if (options.json) {
+          const jsonOutput = await runStructuredInvestigationAsJson(
+            incidentId,
+            options.autoRemediate || false,
+            options.learn || false,
+            options.applyRunbookUpdates || false
+          );
+          console.log(JSON.stringify(jsonOutput, null, 2));
+          return;
+        }
+
         await runStructuredInvestigation(
           incidentId,
           options.verbose || false,
@@ -1167,6 +1422,12 @@ program
           options.applyRunbookUpdates || false
         );
       } catch (error) {
+        if (options.json) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(JSON.stringify({ incidentId, error: message }));
+          process.exit(1);
+        }
+
         console.error(
           chalk.red(
             `Structured investigation failed: ${error instanceof Error ? error.message : error}`
@@ -1193,9 +1454,22 @@ program
 program
   .command('status')
   .description('Get a quick status overview of your infrastructure')
-  .action(async () => {
+  .option('--json', 'Output machine-readable JSON')
+  .action(async (options: { json?: boolean }) => {
     const query =
       'Give me a quick status overview of the infrastructure. What services are running? Any issues?';
+
+    if (options.json) {
+      try {
+        const payload = await runAgentAsJson(query);
+        console.log(JSON.stringify(payload, null, 2));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(JSON.stringify({ error: message }));
+        process.exit(1);
+      }
+      return;
+    }
 
     if (process.stdout.isTTY) {
       render(<AgentUI query={query} verbose={false} />);
@@ -2193,9 +2467,16 @@ mcp
 mcp
   .command('tools')
   .description('List available MCP tools')
-  .action(() => {
+  .option('--json', 'Output machine-readable JSON')
+  .action((options: { json?: boolean }) => {
     const server = createMCPServer();
     const tools = server.getTools();
+
+    if (options.json) {
+      console.log(JSON.stringify({ tools }, null, 2));
+      server.close();
+      return;
+    }
 
     console.log(chalk.cyan('Available MCP Tools:\n'));
     for (const tool of tools) {
