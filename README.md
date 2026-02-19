@@ -72,13 +72,13 @@ Next step: apply runbook "Redis Connection Exhaustion" (approval required)
 
 ### From Source (Development)
 
-Prerequisites: Node.js 20+, Bun
+Prerequisites: Node.js 20+, npm 10+ (Bun optional)
 
 ```bash
 git clone https://github.com/Runbook-Agent/RunbookAI.git runbook
 cd runbook
-bun install
-bun run dev investigate PD-12345
+npm ci
+npm run dev -- investigate PD-12345
 ```
 
 ## Why Teams Adopt RunbookAI
@@ -102,7 +102,8 @@ bun run dev investigate PD-12345
 
 ## Commands
 
-Commands below use the installed `runbook` binary. During local development, use `bun run dev <command>`.
+Commands below use the installed `runbook` binary. During local development, use `npm run dev -- <command>`.
+If you prefer Bun locally, equivalent `bun run ...` commands also work.
 
 ### `runbook demo`
 
@@ -376,13 +377,13 @@ Use the built-in simulation utilities to stage deterministic chat + investigate 
 
 ```bash
 # Create simulation runbooks and sync knowledge
-bun run simulate:setup
+npm run simulate:setup
 
 # Optional: provision failing AWS resources + trigger PagerDuty incident
-bun run simulate:setup -- --with-aws --create-pd-incident
+npm run simulate:setup -- --with-aws --create-pd-incident
 
 # Cleanup simulation infra/resources
-bun run simulate:cleanup
+npm run simulate:cleanup
 ```
 
 Detailed guide: [docs/SIMULATE_INCIDENTS.md](./docs/SIMULATE_INCIDENTS.md)
@@ -392,7 +393,7 @@ Detailed guide: [docs/SIMULATE_INCIDENTS.md](./docs/SIMULATE_INCIDENTS.md)
 Run real-loop investigation benchmarks against fixture datasets:
 
 ```bash
-bun run eval:investigate -- \
+npm run eval:investigate -- \
   --fixtures examples/evals/rcaeval-fixtures.generated.json \
   --out .runbook/evals/rcaeval-report.json
 ```
@@ -400,7 +401,7 @@ bun run eval:investigate -- \
 Run all benchmark adapters in one command (RCAEval + Rootly + TraceRCA):
 
 ```bash
-bun run eval:all -- \
+npm run eval:all -- \
   --out-dir .runbook/evals/all-benchmarks \
   --rcaeval-input examples/evals/rcaeval-input.sample.json \
   --tracerca-input examples/evals/tracerca-input.sample.json
@@ -413,7 +414,7 @@ with available local inputs and fallback fixtures when network/downloads are una
 To run without bootstrap:
 
 ```bash
-bun run eval:all -- --no-setup
+npm run eval:all -- --no-setup
 ```
 
 This generates per-benchmark reports plus an aggregate summary:
@@ -476,16 +477,16 @@ Scratchpad (full audit trail)
 
 ```bash
 # Run in development mode
-bun run dev ask "test query"
+npm run dev -- ask "test query"
 
 # Type check
-bun run typecheck
+npm run typecheck
 
 # Lint
-bun run lint
+npm run lint
 
 # Format
-bun run format
+npm run format
 ```
 
 ## Release Process
@@ -554,8 +555,8 @@ Release Please uses Conventional Commits for semver bumping:
 ## What's New
 - Dynamic runtime skills now execute workflow steps with approval hooks.
 - Kubernetes tooling is available as a read-only query surface and can be gated with `providers.kubernetes.enabled`.
-- Investigation evaluation now supports RCAEval, Rootly, and TraceRCA via a unified runner (`bun run eval:all`).
-- Incident simulation tooling uses generic scripts: `bun run simulate:setup` and `bun run simulate:cleanup`.
+- Investigation evaluation now supports RCAEval, Rootly, and TraceRCA via a unified runner (`npm run eval:all -- ...`).
+- Incident simulation tooling uses generic scripts: `npm run simulate:setup` and `npm run simulate:cleanup`.
 - Claude Code integration includes context hooks, checkpoints, and MCP knowledge tools.
 - Operability context provider contract added for external context backends (Sourcegraph/checkpoints style): [docs/OPERABILITY_CONTEXT_PROVIDER.md](./docs/OPERABILITY_CONTEXT_PROVIDER.md).
 - Added operability ingestion commands with local spool replay (`runbook operability ingest|replay|status`) and automatic Claude hook forwarding.

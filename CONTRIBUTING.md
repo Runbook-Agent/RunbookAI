@@ -4,17 +4,12 @@ Thank you for your interest in contributing to RunbookAI! This guide will help y
 
 ## Good First Issues
 
-New to the project? We maintain a list of beginner-friendly issues to help you get started:
+New to the project? Start with issues labeled:
 
-| Issue | Description |
-|-------|-------------|
-| [#32](https://github.com/Runbook-Agent/RunbookAI/issues/32) | Add example runbook for database connection pool exhaustion |
-| [#33](https://github.com/Runbook-Agent/RunbookAI/issues/33) | Add --json output flag to 'runbook status' command |
-| [#34](https://github.com/Runbook-Agent/RunbookAI/issues/34) | Add unit tests for confidence scoring module |
-| [#35](https://github.com/Runbook-Agent/RunbookAI/issues/35) | Add colored output indicators for investigation confidence levels |
-| [#37](https://github.com/Runbook-Agent/RunbookAI/issues/37) | Add Datadog integration for metrics retrieval |
+- [**good first issue**](https://github.com/Runbook-Agent/RunbookAI/labels/good%20first%20issue)
+- [**help wanted**](https://github.com/Runbook-Agent/RunbookAI/labels/help%20wanted)
 
-Browse all good first issues: [**good first issue** label](https://github.com/Runbook-Agent/RunbookAI/labels/good%20first%20issue)
+Issue scope changes quickly, so we avoid hardcoding specific issue numbers here.
 
 To claim an issue, comment on it to let others know you're working on it.
 
@@ -23,7 +18,8 @@ To claim an issue, comment on it to let others know you're working on it.
 ### Prerequisites
 
 - Node.js 20+
-- [Bun](https://bun.sh/) runtime
+- npm 10+
+- [Bun](https://bun.sh/) (optional)
 - Git
 
 ### Setup
@@ -34,23 +30,25 @@ git clone https://github.com/Runbook-Agent/RunbookAI.git
 cd RunbookAI
 
 # Install dependencies
-bun install
+npm ci
 
 # Run in development mode
-bun run dev --help
+npm run dev -- --help
 ```
 
 ## Development Workflow
 
 ### Running Commands
 
-During development, use `bun run dev` instead of the `runbook` binary:
+During development, use `npm run dev --` instead of the `runbook` binary:
 
 ```bash
-bun run dev ask "What's the status of my services?"
-bun run dev investigate PD-12345
-bun run dev status
+npm run dev -- ask "What's the status of my services?"
+npm run dev -- investigate PD-12345
+npm run dev -- status
 ```
+
+If you prefer Bun locally, equivalent commands (`bun run dev ...`) still work.
 
 ### Code Quality
 
@@ -58,16 +56,16 @@ Before submitting a PR, ensure your code passes all checks:
 
 ```bash
 # Type checking
-bun run typecheck
+npm run typecheck
 
 # Linting
-bun run lint
+npm run lint
 
 # Formatting
-bun run format
+npm run format
 
 # Run tests
-bun test
+npm run test
 ```
 
 ### Pre-commit Hooks
@@ -151,13 +149,13 @@ severity: sev2
 
 ```bash
 # Run all tests
-bun test
+npm run test
 
 # Run specific test file
-bun test src/agent/__tests__/confidence.test.ts
+npm run test -- src/agent/__tests__/confidence.test.ts
 
 # Run tests in watch mode
-bun run test:watch
+npm run test:watch
 ```
 
 ## Questions?
