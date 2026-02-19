@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/Runbook-Agent/RunbookAI/compare/v0.5.0...v0.6.0) (2026-02-19)
+
+
+### Features
+
+* **agent:** add compact summarizers for k8s code and ops incidents ([#90](https://github.com/Runbook-Agent/RunbookAI/issues/90)) ([3c40c32](https://github.com/Runbook-Agent/RunbookAI/commit/3c40c32e7f30d65964d3d2b7bbd6aadd786fea5c))
+* **cli:** add json output for status investigate and mcp tools ([#91](https://github.com/Runbook-Agent/RunbookAI/issues/91)) ([62e8135](https://github.com/Runbook-Agent/RunbookAI/commit/62e81353f7b74a1781c0a73ea8db24b5057b7244))
+* **integrations:** persist hook tool usage and stop checkpoints ([#88](https://github.com/Runbook-Agent/RunbookAI/issues/88)) ([f8f08be](https://github.com/Runbook-Agent/RunbookAI/commit/f8f08beb9c02b1cf8d373782371b6b6978332fd0))
+
+
+### Performance Improvements
+
+* **integrations:** cache hook knowledge retriever between events ([#92](https://github.com/Runbook-Agent/RunbookAI/issues/92)) ([30a054d](https://github.com/Runbook-Agent/RunbookAI/commit/30a054d3ccf6d62a4204b36077e4833270ba87da))
+
 ## [0.5.0](https://github.com/Runbook-Agent/RunbookAI/compare/v0.4.1...v0.5.0) (2026-02-18)
 
 
