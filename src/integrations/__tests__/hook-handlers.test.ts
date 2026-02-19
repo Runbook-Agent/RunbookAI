@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, rm, writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { createCheckpointStore } from '../../session';
 import {
   clearHookHandlerRetrieverCache,
   handleSessionStart,
@@ -59,6 +60,8 @@ describe('Hook Handlers', () => {
       const state = JSON.parse(await readFile(sessionFile, 'utf-8'));
       expect(state.sessionId).toBe('test-session-123');
       expect(state.promptCount).toBe(0);
+      expect(state.toolCallCount).toBe(0);
+      expect(state.symptomsDiscovered).toEqual([]);
     });
 
     it('should include knowledge stats if available', async () => {
@@ -221,25 +224,64 @@ Some content here.
   });
 
   describe('handlePostToolUse', () => {
-    it('should return empty response (no-op for now)', async () => {
+    it('should persist tool call metadata and update state', async () => {
+      await handleSessionStart(
+        { session_id: 'test-session-post', hook_event_name: 'SessionStart' },
+        config
+      );
+
       const payload: HookPayload = {
         session_id: 'test-session-post',
         hook_event_name: 'PostToolUse',
-        tool_name: 'Read',
-        tool_result: { content: 'file contents' },
+        tool_name: 'Bash',
+        tool_input: { command: 'kubectl get pods -n checkout-service' },
+        tool_result: { stdout: 'pod-a\npod-b' },
       };
 
       const response = await handlePostToolUse(payload, config);
 
       expect(response).toEqual({});
+
+      const sessionFile = join(TEST_BASE_DIR, 'sessions', 'test-session-post.json');
+      const state = JSON.parse(await readFile(sessionFile, 'utf-8'));
+      expect(state.toolCallCount).toBe(1);
+      expect(state.lastToolName).toBe('Bash');
+      expect(state.servicesDiscovered).toContain('checkout');
+
+      const toolEventsFile = join(TEST_BASE_DIR, 'sessions', 'test-session-post.tools.jsonl');
+      expect(existsSync(toolEventsFile)).toBe(true);
+      const eventLines = (await readFile(toolEventsFile, 'utf-8')).trim().split('\n');
+      expect(eventLines.length).toBe(1);
+
+      const record = JSON.parse(eventLines[0]);
+      expect(record.toolName).toBe('Bash');
+      expect(record.toolResultSummary).toContain('pod-a');
     });
   });
 
   describe('handleStop', () => {
-    it('should handle stop event', async () => {
+    it('should persist a checkpoint for the session on stop', async () => {
       // First create a session
       await handleSessionStart(
         { session_id: 'test-session-stop', hook_event_name: 'SessionStart' },
+        config
+      );
+      await handleUserPromptSubmit(
+        {
+          session_id: 'test-session-stop',
+          hook_event_name: 'UserPromptSubmit',
+          prompt: 'checkout-service has high latency and timeout issues',
+        },
+        config
+      );
+      await handlePostToolUse(
+        {
+          session_id: 'test-session-stop',
+          hook_event_name: 'PostToolUse',
+          tool_name: 'cloudwatch_logs',
+          tool_input: { filter_pattern: 'ERROR timeout' },
+          tool_result: { events: [{ message: 'timeout reached' }] },
+        },
         config
       );
 
@@ -250,8 +292,23 @@ Some content here.
 
       const response = await handleStop(payload, config);
 
-      // Currently returns empty, but session state should exist
       expect(response).toEqual({});
+
+      const stateFile = join(TEST_BASE_DIR, 'sessions', 'test-session-stop.json');
+      const state = JSON.parse(await readFile(stateFile, 'utf-8'));
+      expect(state.lastCheckpointId).toBeDefined();
+      expect(state.investigationId).toBe('claude-session-test-session-stop');
+      expect(state.stoppedAt).toBeDefined();
+
+      const store = createCheckpointStore({ baseDir: TEST_BASE_DIR });
+      const checkpoints = await store.list(state.investigationId);
+      expect(checkpoints.length).toBe(1);
+
+      const checkpoint = await store.load(state.investigationId, checkpoints[0].id);
+      expect(checkpoint?.phase).toBe('complete');
+      expect(checkpoint?.toolCallCount).toBe(1);
+      expect(checkpoint?.servicesDiscovered).toContain('checkout');
+      expect(checkpoint?.symptomsIdentified).toContain('High latency');
     });
   });
 

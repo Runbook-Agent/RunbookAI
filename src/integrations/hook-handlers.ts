@@ -6,10 +6,11 @@
  */
 
 import { existsSync } from 'fs';
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile, mkdir, appendFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import { createConfiguredRetriever, KnowledgeRetriever } from '../knowledge/retriever/index';
 import type { RetrievedKnowledge, RetrievedChunk } from '../knowledge/types';
+import { createCheckpoint, createCheckpointStore } from '../session';
 
 /**
  * Hook response that can be returned to Claude Code
@@ -59,7 +60,12 @@ export interface SessionState {
   startedAt: string;
   lastPrompt?: string;
   servicesDiscovered: string[];
+  symptomsDiscovered: string[];
   promptCount: number;
+  toolCallCount: number;
+  lastToolName?: string;
+  stoppedAt?: string;
+  lastCheckpointId?: string;
 }
 
 /**
@@ -80,7 +86,6 @@ const DEFAULT_CONFIG: HookHandlerConfig = {
   maxRunbooksToShow: 3,
   maxKnownIssuesToShow: 3,
 };
-
 const RETRIEVER_IDLE_TTL_MS = 2 * 60 * 1000;
 
 interface CachedRetriever {
@@ -135,6 +140,14 @@ export function clearHookHandlerRetrieverCache(): void {
     cached.retriever.close();
   }
   retrieverCache.clear();
+}
+
+interface ToolEventRecord {
+  timestamp: string;
+  sessionId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  toolResultSummary?: string;
 }
 
 /**
@@ -294,6 +307,51 @@ async function saveSessionState(baseDir: string, state: SessionState): Promise<v
   await writeFile(sessionFile, JSON.stringify(state, null, 2), 'utf-8');
 }
 
+function createDefaultSessionState(sessionId: string): SessionState {
+  return {
+    sessionId,
+    startedAt: new Date().toISOString(),
+    servicesDiscovered: [],
+    symptomsDiscovered: [],
+    promptCount: 0,
+    toolCallCount: 0,
+  };
+}
+
+async function getOrCreateSessionState(baseDir: string, sessionId: string): Promise<SessionState> {
+  const existing = await loadSessionState(baseDir, sessionId);
+  if (existing) {
+    return {
+      ...existing,
+      symptomsDiscovered: existing.symptomsDiscovered || [],
+      toolCallCount: existing.toolCallCount || 0,
+    };
+  }
+  return createDefaultSessionState(sessionId);
+}
+
+function summarizeToolResult(result: unknown, maxLen = 1200): string | undefined {
+  if (result === null || result === undefined) {
+    return undefined;
+  }
+  if (typeof result === 'string') {
+    return result.length > maxLen ? `${result.slice(0, maxLen)}...` : result;
+  }
+  try {
+    const serialized = JSON.stringify(result);
+    return serialized.length > maxLen ? `${serialized.slice(0, maxLen)}...` : serialized;
+  } catch {
+    return String(result);
+  }
+}
+
+async function appendToolEvent(baseDir: string, event: ToolEventRecord): Promise<void> {
+  const sessionDir = join(baseDir, 'sessions');
+  await mkdir(sessionDir, { recursive: true });
+  const eventsPath = join(sessionDir, `${event.sessionId}.tools.jsonl`);
+  await appendFile(eventsPath, `${JSON.stringify(event)}\n`, 'utf-8');
+}
+
 /**
  * Hook handler for SessionStart events
  */
@@ -301,12 +359,7 @@ export async function handleSessionStart(
   payload: HookPayload,
   config: HookHandlerConfig = DEFAULT_CONFIG
 ): Promise<HookResponse> {
-  const state: SessionState = {
-    sessionId: payload.session_id,
-    startedAt: new Date().toISOString(),
-    servicesDiscovered: [],
-    promptCount: 0,
-  };
+  const state = createDefaultSessionState(payload.session_id);
 
   await saveSessionState(config.baseDir, state);
 
@@ -353,19 +406,12 @@ export async function handleUserPromptSubmit(
   const symptoms = extractSymptoms(payload.prompt);
 
   // Update session state
-  let state = await loadSessionState(config.baseDir, payload.session_id);
-  if (!state) {
-    state = {
-      sessionId: payload.session_id,
-      startedAt: new Date().toISOString(),
-      servicesDiscovered: [],
-      promptCount: 0,
-    };
-  }
+  const state = await getOrCreateSessionState(config.baseDir, payload.session_id);
 
   state.lastPrompt = payload.prompt;
   state.promptCount++;
   state.servicesDiscovered = [...new Set([...state.servicesDiscovered, ...services])];
+  state.symptomsDiscovered = [...new Set([...state.symptomsDiscovered, ...symptoms])];
   await saveSessionState(config.baseDir, state);
 
   // Skip context injection if disabled
@@ -478,8 +524,33 @@ export async function handlePostToolUse(
   payload: HookPayload,
   config: HookHandlerConfig = DEFAULT_CONFIG
 ): Promise<HookResponse> {
-  // For now, just log tool usage for future analysis
-  // This could be expanded to track runbook step execution
+  const toolName = payload.tool_name || 'unknown';
+  const toolInput = payload.tool_input || {};
+
+  try {
+    const state = await getOrCreateSessionState(config.baseDir, payload.session_id);
+    state.toolCallCount++;
+    state.lastToolName = toolName;
+
+    if (typeof toolInput.command === 'string') {
+      const servicesFromCommand = extractServices(toolInput.command);
+      state.servicesDiscovered = [
+        ...new Set([...state.servicesDiscovered, ...servicesFromCommand]),
+      ];
+    }
+
+    await saveSessionState(config.baseDir, state);
+    await appendToolEvent(config.baseDir, {
+      timestamp: new Date().toISOString(),
+      sessionId: payload.session_id,
+      toolName,
+      toolInput,
+      toolResultSummary: summarizeToolResult(payload.tool_result),
+    });
+  } catch {
+    // Keep hook pipeline non-blocking.
+  }
+
   return {};
 }
 
@@ -497,8 +568,31 @@ export async function handleStop(
     return {};
   }
 
-  // Future: Create investigation checkpoint here
-  // Future: Trigger learning loop if investigation complete
+  try {
+    const investigationId = state.investigationId || `claude-session-${payload.session_id}`;
+    const store = createCheckpointStore({ baseDir: config.baseDir });
+    const checkpoint = createCheckpoint(
+      investigationId,
+      {
+        query: state.lastPrompt || `Claude session ${payload.session_id}`,
+        phase: 'complete',
+        hypotheses: [],
+        confidence: 0,
+        toolCallCount: state.toolCallCount || 0,
+        servicesDiscovered: state.servicesDiscovered,
+        symptomsIdentified: state.symptomsDiscovered || [],
+      },
+      payload.session_id
+    );
+    const checkpointId = await store.save(checkpoint);
+
+    state.investigationId = investigationId;
+    state.stoppedAt = new Date().toISOString();
+    state.lastCheckpointId = checkpointId;
+    await saveSessionState(config.baseDir, state);
+  } catch {
+    // Keep hook pipeline non-blocking.
+  }
 
   return {};
 }
