@@ -25,6 +25,7 @@
     "eval:convert:rootly": "tsx src/eval/rootly-logs-to-fixtures.ts",
     "eval:convert:tracerca": "tsx src/eval/tracerca-to-fixtures.ts",
     "eval:all": "tsx src/eval/run-all-benchmarks.ts",
+    "eval:smoke": "tsx src/eval/run-all-benchmarks.ts --offline --no-setup --benchmarks rcaeval,tracerca --limit 1 --rcaeval-input examples/evals/rcaeval-input.sample.json --tracerca-input examples/evals/tracerca-input.sample.json",
     "simulate:setup": "bash scripts/simulate/setup-incidents.sh",
     "simulate:cleanup": "bash scripts/simulate/cleanup-incidents.sh",
     "release": "bash scripts/release/trigger-release.sh",
