@@ -5,7 +5,7 @@
  * the knowledge base when new services or symptoms are discovered.
  */
 
-import type { KnowledgeRetriever } from '../knowledge/retriever/index';
+import type { IKnowledgeRetriever } from '../knowledge/retriever/types';
 import type {
   RetrievedKnowledge,
   RetrievedChunk,
@@ -105,10 +105,10 @@ const DEFAULT_CONFIG: KnowledgeContextConfig = {
  */
 export class KnowledgeContextManager {
   private readonly config: KnowledgeContextConfig;
-  private readonly retriever: KnowledgeRetriever;
+  private readonly retriever: IKnowledgeRetriever;
   private context: KnowledgeContext;
 
-  constructor(retriever: KnowledgeRetriever, config: Partial<KnowledgeContextConfig> = {}) {
+  constructor(retriever: IKnowledgeRetriever, config: Partial<KnowledgeContextConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.retriever = retriever;
     this.context = this.createEmptyContext();

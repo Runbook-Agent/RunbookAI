@@ -197,6 +197,21 @@ const IntegrationsConfigSchema = z.object({
   claude: ClaudeIntegrationSchema.default({}),
 });
 
+const ServerConfigSchema = z
+  .object({
+    url: z.string().url().optional(),
+    apiKey: z.string().optional(),
+    port: z.number().int().min(1).max(65535).default(4000),
+    host: z.string().default('0.0.0.0'),
+    cors: z
+      .object({
+        enabled: z.boolean().default(false),
+        origins: z.array(z.string()).default(['*']),
+      })
+      .default({}),
+  })
+  .default({});
+
 const ConfigSchema = z.object({
   llm: LLMConfigSchema.default({}),
   providers: z
@@ -213,6 +228,7 @@ const ConfigSchema = z.object({
   safety: SafetyConfigSchema.default({}),
   agent: AgentConfigSchema.default({}),
   integrations: IntegrationsConfigSchema.default({}),
+  server: ServerConfigSchema,
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -425,6 +441,16 @@ export function validateConfig(config: Config): string[] {
     !config.integrations.claude.sessionStorage.s3.bucket
   ) {
     errors.push('Claude session storage backend is s3 but no bucket is configured.');
+  }
+
+  // Check server config
+  if (config.server.url) {
+    const serverApiKey = config.server.apiKey || process.env.RUNBOOK_SERVER_API_KEY;
+    if (!serverApiKey) {
+      errors.push(
+        'Server URL is configured but no API key found. Set server.apiKey or RUNBOOK_SERVER_API_KEY.'
+      );
+    }
   }
 
   for (const source of config.knowledge.sources) {

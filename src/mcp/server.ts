@@ -5,7 +5,8 @@
  * to Claude Code via the Model Context Protocol.
  */
 
-import { createConfiguredRetriever, KnowledgeRetriever } from '../knowledge/retriever/index';
+import { createConfiguredRetriever } from '../knowledge/retriever/index';
+import type { IKnowledgeRetriever } from '../knowledge/retriever/types';
 import type { RetrievedChunk, KnowledgeType } from '../knowledge/types';
 
 /**
@@ -222,7 +223,7 @@ function formatChunks(chunks: RetrievedChunk[], type: string): string {
  */
 async function handleSearchRunbooks(
   args: Record<string, unknown>,
-  retriever: KnowledgeRetriever
+  retriever: IKnowledgeRetriever
 ): Promise<MCPToolCallResponse> {
   const query = String(args.query || '');
   const services = Array.isArray(args.services) ? args.services.map(String) : undefined;
@@ -249,7 +250,7 @@ async function handleSearchRunbooks(
  */
 async function handleGetKnownIssues(
   args: Record<string, unknown>,
-  retriever: KnowledgeRetriever
+  retriever: IKnowledgeRetriever
 ): Promise<MCPToolCallResponse> {
   const services = Array.isArray(args.services) ? args.services.map(String) : [];
   const symptoms = Array.isArray(args.symptoms) ? args.symptoms.map(String) : [];
@@ -278,7 +279,7 @@ async function handleGetKnownIssues(
  */
 async function handleSearchPostmortems(
   args: Record<string, unknown>,
-  retriever: KnowledgeRetriever
+  retriever: IKnowledgeRetriever
 ): Promise<MCPToolCallResponse> {
   const query = String(args.query || args.rootCause || '*');
   const services = Array.isArray(args.services) ? args.services.map(String) : undefined;
@@ -304,9 +305,9 @@ async function handleSearchPostmortems(
  * Handle get_knowledge_stats tool call
  */
 async function handleGetKnowledgeStats(
-  retriever: KnowledgeRetriever
+  retriever: IKnowledgeRetriever
 ): Promise<MCPToolCallResponse> {
-  const counts = retriever.getDocumentCountsByType();
+  const counts = await retriever.getDocumentCountsByType();
   const total = Object.values(counts).reduce((sum, c) => sum + c, 0);
 
   const lines: string[] = [
@@ -336,11 +337,11 @@ async function handleGetKnowledgeStats(
  */
 async function handleListServices(
   args: Record<string, unknown>,
-  retriever: KnowledgeRetriever
+  retriever: IKnowledgeRetriever
 ): Promise<MCPToolCallResponse> {
   const typeFilter = typeof args.type === 'string' ? [args.type as KnowledgeType] : undefined;
 
-  const allDocs = retriever.getAllDocuments();
+  const allDocs = await retriever.getAllDocuments();
   const services = new Set<string>();
 
   for (const doc of allDocs) {
@@ -385,11 +386,19 @@ async function handleListServices(
  */
 export class MCPServer {
   private config: MCPServerConfig;
-  private retriever: KnowledgeRetriever | null = null;
-  private retrieverPromise: Promise<KnowledgeRetriever> | null = null;
+  private retriever: IKnowledgeRetriever | null = null;
+  private retrieverPromise: Promise<IKnowledgeRetriever> | null = null;
 
   constructor(config: Partial<MCPServerConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  /**
+   * Inject an existing retriever (used by server mode to avoid double-init).
+   */
+  setRetriever(retriever: IKnowledgeRetriever): void {
+    this.retriever = retriever;
+    this.retrieverPromise = null;
   }
 
   /**
@@ -402,7 +411,7 @@ export class MCPServer {
   /**
    * Initialize the retriever
    */
-  private async getRetriever(): Promise<KnowledgeRetriever> {
+  private async getRetriever(): Promise<IKnowledgeRetriever> {
     if (!this.retriever) {
       if (!this.retrieverPromise) {
         this.retrieverPromise = createConfiguredRetriever(this.config.baseDir);
