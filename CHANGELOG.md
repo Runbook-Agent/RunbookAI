@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/Runbook-Agent/RunbookAI/compare/v0.6.0...v0.7.0) (2026-03-02)
+
+
+### Features
+
+* **docs:** revamp landing page with new copy and light theme ([#97](https://github.com/Runbook-Agent/RunbookAI/issues/97)) ([93950bc](https://github.com/Runbook-Agent/RunbookAI/commit/93950bc6efd7768397068d34c8de0a6f5de5bf6d))
+* **server:** add shared knowledge server and remote retriever ([#100](https://github.com/Runbook-Agent/RunbookAI/issues/100)) ([a0493b4](https://github.com/Runbook-Agent/RunbookAI/commit/a0493b4308fbd12b36e6573f42c67c7d9fb5ed0b))
+
 ## [0.6.0](https://github.com/Runbook-Agent/RunbookAI/compare/v0.5.0...v0.6.0) (2026-02-19)
 
 
