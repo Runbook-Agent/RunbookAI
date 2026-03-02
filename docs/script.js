@@ -40,6 +40,8 @@ function copyToClipboard(button) {
 // ========================================
 
 document.addEventListener('DOMContentLoaded', () => {
+  initDesignPartnerForm();
+
   // Register GSAP plugins
   if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
     gsap.registerPlugin(ScrollTrigger);
@@ -138,6 +140,44 @@ document.addEventListener('DOMContentLoaded', () => {
     updateActiveLink();
   }
 });
+
+function initDesignPartnerForm() {
+  const form = document.getElementById('design-partner-form');
+  if (!form) return;
+
+  const status = document.getElementById('design-partner-status');
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+
+    const formData = new FormData(form);
+    const role = String(formData.get('role') || '').trim();
+    const infraStack = String(formData.get('infraStack') || '').trim();
+    const incidentPain = String(formData.get('incidentPain') || '').trim();
+    const contact = String(formData.get('contact') || '').trim();
+
+    const subjectRole = role || 'RunbookAI Design Partner';
+    const subject = `RunbookAI Design Partner: ${subjectRole}`;
+    const body = [
+      'Design Partner Intake',
+      '',
+      `Role: ${role}`,
+      `Infra stack: ${infraStack}`,
+      `Incident pain: ${incidentPain}`,
+      `Contact: ${contact}`,
+      '',
+      'Submitted from userunbook.ai'
+    ].join('\n');
+
+    const mailtoUrl = `mailto:design-partners@userunbook.ai?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    if (status) {
+      status.textContent = 'Opening your email client...';
+    }
+
+    window.location.href = mailtoUrl;
+  });
+}
 
 function initAnimations() {
   // Accessibility: skip all animations for reduced-motion users
