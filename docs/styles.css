@@ -1050,6 +1050,13 @@ body {
   line-height: 1.7;
 }
 
+.cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  justify-content: center;
+}
+
 /* ========================================
    FOOTER
    ======================================== */
