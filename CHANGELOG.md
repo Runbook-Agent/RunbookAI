@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.0](https://github.com/Runbook-Agent/RunbookAI/compare/v0.7.0...v0.8.0) (2026-03-02)
+
+
+### Features
+
+* **server:** add embedded admin web UI ([#105](https://github.com/Runbook-Agent/RunbookAI/issues/105)) ([0e22020](https://github.com/Runbook-Agent/RunbookAI/commit/0e22020d358abaf9f9be1bc994669f5760384dc3))
+* **site:** add polished animations to landing page ([#106](https://github.com/Runbook-Agent/RunbookAI/issues/106)) ([7e198a0](https://github.com/Runbook-Agent/RunbookAI/commit/7e198a0592726ed2705a098c2379be4aaf7d6d1a))
+* **site:** strengthen homepage positioning and conversion CTAs ([#102](https://github.com/Runbook-Agent/RunbookAI/issues/102)) ([76c77ac](https://github.com/Runbook-Agent/RunbookAI/commit/76c77ac9b801eb53b0f796afc2220c221edf002d))
+
 ## [0.7.0](https://github.com/Runbook-Agent/RunbookAI/compare/v0.6.0...v0.7.0) (2026-03-02)
 
 
