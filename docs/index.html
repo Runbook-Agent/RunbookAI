@@ -88,7 +88,7 @@
           <span>Self-Hosted</span>
         </div>
 
-        <h1 class="hero-title" data-reveal>
+        <h1 class="hero-title" data-hero-split>
           From page to root cause.<br/>
           <span class="hero-title-accent">In minutes, not hours.</span>
         </h1>
@@ -138,7 +138,9 @@
     <section class="stack-strip" data-reveal-section>
       <div class="container">
         <p class="stack-label">Works with your stack</p>
-        <div class="stack-logos">
+      </div>
+      <div class="marquee">
+        <div class="marquee-track">
           <span class="stack-item">AWS</span>
           <span class="stack-dot"></span>
           <span class="stack-item">Kubernetes</span>
@@ -152,6 +154,21 @@
           <span class="stack-item">Datadog</span>
           <span class="stack-dot"></span>
           <span class="stack-item">Confluence</span>
+          <span class="stack-dot"></span>
+          <span class="stack-item">AWS</span>
+          <span class="stack-dot"></span>
+          <span class="stack-item">Kubernetes</span>
+          <span class="stack-dot"></span>
+          <span class="stack-item">PagerDuty</span>
+          <span class="stack-dot"></span>
+          <span class="stack-item">OpsGenie</span>
+          <span class="stack-dot"></span>
+          <span class="stack-item">Slack</span>
+          <span class="stack-dot"></span>
+          <span class="stack-item">Datadog</span>
+          <span class="stack-dot"></span>
+          <span class="stack-item">Confluence</span>
+          <span class="stack-dot"></span>
         </div>
       </div>
     </section>
@@ -239,35 +256,40 @@
           <h2 class="section-title">From alert to resolution</h2>
         </div>
 
-        <div class="flow">
-          <div class="flow-step" data-reveal-section>
-            <div class="flow-num">1</div>
-            <h3>Alert</h3>
-            <p>An incident fires from PagerDuty, OpsGenie, or a Slack mention</p>
+        <div class="flow-wrapper">
+          <div class="flow-progress-track">
+            <div class="flow-progress-fill"></div>
           </div>
-          <div class="flow-connector" data-reveal-section>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </div>
-          <div class="flow-step" data-reveal-section>
-            <div class="flow-num">2</div>
-            <h3>Hypothesize</h3>
-            <p>Forms ranked hypotheses from symptoms and organizational knowledge</p>
-          </div>
-          <div class="flow-connector" data-reveal-section>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </div>
-          <div class="flow-step" data-reveal-section>
-            <div class="flow-num">3</div>
-            <h3>Investigate</h3>
-            <p>Runs targeted queries against your infrastructure for evidence</p>
-          </div>
-          <div class="flow-connector" data-reveal-section>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </div>
-          <div class="flow-step" data-reveal-section>
-            <div class="flow-num">4</div>
-            <h3>Resolve</h3>
-            <p>Delivers root cause with confidence scores and remediation steps</p>
+          <div class="flow">
+            <div class="flow-step" data-reveal-section>
+              <div class="flow-num" data-count="1">1</div>
+              <h3>Alert</h3>
+              <p>An incident fires from PagerDuty, OpsGenie, or a Slack mention</p>
+            </div>
+            <div class="flow-connector" data-reveal-section>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+            <div class="flow-step" data-reveal-section>
+              <div class="flow-num" data-count="2">2</div>
+              <h3>Hypothesize</h3>
+              <p>Forms ranked hypotheses from symptoms and organizational knowledge</p>
+            </div>
+            <div class="flow-connector" data-reveal-section>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+            <div class="flow-step" data-reveal-section>
+              <div class="flow-num" data-count="3">3</div>
+              <h3>Investigate</h3>
+              <p>Runs targeted queries against your infrastructure for evidence</p>
+            </div>
+            <div class="flow-connector" data-reveal-section>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+            <div class="flow-step" data-reveal-section>
+              <div class="flow-num" data-count="4">4</div>
+              <h3>Resolve</h3>
+              <p>Delivers root cause with confidence scores and remediation steps</p>
+            </div>
           </div>
         </div>
       </div>

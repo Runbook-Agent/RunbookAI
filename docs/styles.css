@@ -309,7 +309,6 @@ body {
 }
 
 .btn-primary:hover {
-  transform: translateY(-2px);
   box-shadow: 0 6px 24px rgba(124, 58, 237, 0.3);
 }
 
@@ -398,10 +397,36 @@ body {
 }
 
 .hero-title-accent {
-  background: var(--gradient-purple);
+  background: linear-gradient(
+    90deg,
+    var(--purple) 0%,
+    var(--indigo) 30%,
+    #a78bfa 50%,
+    var(--indigo) 70%,
+    var(--purple) 100%
+  );
+  background-size: 200% 100%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  animation: shimmer 4s ease-in-out infinite;
+  animation-delay: 2s;
+}
+
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  50% { background-position: 0% 0; }
+  100% { background-position: 100% 0; }
+}
+
+/* Hero split-text character spans */
+.hero-title .char {
+  display: inline-block;
+  opacity: 0;
+}
+
+[data-hero-split] {
+  opacity: 0;
 }
 
 .hero-subtitle {
@@ -537,6 +562,30 @@ body {
   flex-wrap: wrap;
 }
 
+/* Marquee */
+.marquee {
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, black 10%, black 90%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 10%, black 90%, transparent);
+}
+
+.marquee-track {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  width: max-content;
+  animation: marquee 25s linear infinite;
+}
+
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 .stack-item {
   font-size: 14px;
   font-weight: 600;
@@ -605,12 +654,34 @@ body {
 }
 
 .cap-card {
+  position: relative;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   padding: var(--space-xl) var(--space-lg);
   transition: all 0.35s var(--ease);
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.cap-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    400px circle at var(--spotlight-x, 50%) var(--spotlight-y, 50%),
+    rgba(124, 58, 237, 0.06),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cap-card:hover::before {
+  opacity: 1;
 }
 
 .cap-card:hover {
@@ -677,7 +748,29 @@ body {
   background: var(--bg-surface);
 }
 
+.flow-wrapper {
+  position: relative;
+}
+
+.flow-progress-track {
+  position: absolute;
+  top: 22px;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  z-index: 0;
+}
+
+.flow-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--gradient-purple);
+  border-radius: 1px;
+}
+
 .flow {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -841,6 +934,22 @@ body {
 .st-prompt {
   color: var(--term-text);
   font-weight: 500;
+}
+
+.st-prompt::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: var(--term-text);
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: cursor-blink 1s step-end infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .st-response {
@@ -1153,6 +1262,35 @@ body {
 }
 
 /* ========================================
+   PREFERS REDUCED MOTION
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  [data-reveal],
+  [data-reveal-section],
+  [data-hero-split],
+  .hero-title .char {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .marquee-track {
+    animation: none !important;
+  }
+
+  .hero-title-accent {
+    animation: none !important;
+    background-position: 0% 0 !important;
+  }
+}
+
+/* ========================================
    RESPONSIVE
    ======================================== */
 
@@ -1194,6 +1332,10 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .flow-progress-track {
+    display: none;
+  }
+
   .flow {
     flex-direction: column;
     align-items: center;
@@ -1215,10 +1357,6 @@ body {
   .footer-links {
     grid-template-columns: 1fr;
     gap: var(--space-lg);
-  }
-
-  .stack-logos {
-    gap: var(--space-md);
   }
 
   .install-box {
@@ -1244,13 +1382,6 @@ body {
     width: 100%;
   }
 
-  .stack-dot {
-    display: none;
-  }
-
-  .stack-logos {
-    gap: var(--space-sm) var(--space-md);
-  }
 }
 
 /* ========================================
