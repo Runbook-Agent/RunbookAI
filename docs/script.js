@@ -201,7 +201,11 @@ function initAnimations() {
 function splitTextIntoChars(element) {
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
   const textNodes = [];
-  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  while (walker.nextNode()) {
+    // Skip text inside .hero-title-accent (animated as a whole to preserve gradient)
+    if (walker.currentNode.parentElement.closest('.hero-title-accent')) continue;
+    textNodes.push(walker.currentNode);
+  }
 
   textNodes.forEach(node => {
     const fragment = document.createDocumentFragment();
@@ -226,8 +230,12 @@ function initHeroSplitText() {
   const heroTitle = document.querySelector('[data-hero-split]');
   if (!heroTitle) return;
 
+  const accent = heroTitle.querySelector('.hero-title-accent');
   const chars = splitTextIntoChars(heroTitle);
   heroTitle.style.opacity = '1';
+
+  // Hide accent span initially (animated as a whole to preserve gradient)
+  if (accent) gsap.set(accent, { opacity: 0, y: 20 });
 
   const tl = gsap.timeline({ delay: 0.2 });
 
@@ -242,6 +250,16 @@ function initHeroSplitText() {
       ease: 'power3.out',
     }
   );
+
+  // Accent line fades up as a whole, preserving the gradient shimmer
+  if (accent) {
+    tl.to(accent, {
+      opacity: 1,
+      y: 0,
+      duration: 0.6,
+      ease: 'power3.out',
+    }, '-=0.2');
+  }
 
   // After title finishes, animate remaining hero elements
   const heroReveals = document.querySelectorAll('.hero [data-reveal]');
