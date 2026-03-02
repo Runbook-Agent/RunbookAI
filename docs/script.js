@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initAnimations();
   } else {
     // Fallback: show everything if GSAP didn't load
-    document.querySelectorAll('[data-reveal], [data-reveal-section]').forEach(el => {
+    document.querySelectorAll('[data-reveal], [data-reveal-section], [data-hero-split]').forEach(el => {
       el.style.opacity = '1';
       el.style.transform = 'none';
     });
@@ -140,19 +140,26 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initAnimations() {
-  // Hero elements — staggered reveal on page load
-  const heroReveals = document.querySelectorAll('.hero [data-reveal]');
-  gsap.fromTo(heroReveals,
-    { opacity: 0, y: 28 },
-    {
-      opacity: 1,
-      y: 0,
-      duration: 0.8,
-      stagger: 0.1,
-      ease: 'power3.out',
-      delay: 0.15
-    }
-  );
+  // Accessibility: skip all animations for reduced-motion users
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReducedMotion) {
+    document.querySelectorAll('[data-reveal], [data-reveal-section], [data-hero-split]').forEach(el => {
+      el.style.opacity = '1';
+      el.style.transform = 'none';
+    });
+    document.querySelectorAll('.hero-title .char').forEach(el => {
+      el.style.opacity = '1';
+    });
+    return;
+  }
+
+  // --- Modular animation initializers ---
+  initHeroSplitText();
+  initCardSpotlight();
+  initFlowProgress();
+  initSpotlightTyping();
+  initFlowCounters();
+  initMagneticButtons();
 
   // Scroll-triggered reveals for sections
   const sectionReveals = document.querySelectorAll('[data-reveal-section]');
@@ -185,6 +192,244 @@ function initAnimations() {
       }
     });
   }
+}
+
+// ========================================
+// Split Text Utility
+// ========================================
+
+function splitTextIntoChars(element) {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+  const textNodes = [];
+  while (walker.nextNode()) {
+    // Skip text inside .hero-title-accent (animated as a whole to preserve gradient)
+    if (walker.currentNode.parentElement.closest('.hero-title-accent')) continue;
+    textNodes.push(walker.currentNode);
+  }
+
+  textNodes.forEach(node => {
+    const fragment = document.createDocumentFragment();
+    const text = node.textContent;
+    for (let i = 0; i < text.length; i++) {
+      const span = document.createElement('span');
+      span.className = 'char';
+      span.textContent = text[i] === ' ' ? '\u00A0' : text[i];
+      fragment.appendChild(span);
+    }
+    node.parentNode.replaceChild(fragment, node);
+  });
+
+  return element.querySelectorAll('.char');
+}
+
+// ========================================
+// 1. Hero Split-Text Character Animation
+// ========================================
+
+function initHeroSplitText() {
+  const heroTitle = document.querySelector('[data-hero-split]');
+  if (!heroTitle) return;
+
+  const accent = heroTitle.querySelector('.hero-title-accent');
+  const chars = splitTextIntoChars(heroTitle);
+  heroTitle.style.opacity = '1';
+
+  // Hide accent span initially (animated as a whole to preserve gradient)
+  if (accent) gsap.set(accent, { opacity: 0, y: 20 });
+
+  const tl = gsap.timeline({ delay: 0.2 });
+
+  tl.fromTo(chars,
+    { opacity: 0, y: 20, rotateX: -40 },
+    {
+      opacity: 1,
+      y: 0,
+      rotateX: 0,
+      duration: 0.5,
+      stagger: 0.018,
+      ease: 'power3.out',
+    }
+  );
+
+  // Accent line fades up as a whole, preserving the gradient shimmer
+  if (accent) {
+    tl.to(accent, {
+      opacity: 1,
+      y: 0,
+      duration: 0.6,
+      ease: 'power3.out',
+    }, '-=0.2');
+  }
+
+  // After title finishes, animate remaining hero elements
+  const heroReveals = document.querySelectorAll('.hero [data-reveal]');
+  tl.fromTo(heroReveals,
+    { opacity: 0, y: 28 },
+    {
+      opacity: 1,
+      y: 0,
+      duration: 0.8,
+      stagger: 0.1,
+      ease: 'power3.out',
+    },
+    '-=0.3'
+  );
+}
+
+// ========================================
+// 4. Capability Cards Mouse-Tracking Spotlight
+// ========================================
+
+function initCardSpotlight() {
+  const cards = document.querySelectorAll('.cap-card');
+  cards.forEach(card => {
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      card.style.setProperty('--spotlight-x', x + 'px');
+      card.style.setProperty('--spotlight-y', y + 'px');
+    });
+  });
+}
+
+// ========================================
+// 5. How It Works Scroll-Connected Progress
+// ========================================
+
+function initFlowProgress() {
+  const wrapper = document.querySelector('.flow-wrapper');
+  const track = document.querySelector('.flow-progress-track');
+  const fill = document.querySelector('.flow-progress-fill');
+  if (!wrapper || !track || !fill) return;
+
+  // Only on desktop (horizontal layout)
+  if (window.innerWidth <= 768) return;
+
+  const steps = wrapper.querySelectorAll('.flow-step');
+  if (steps.length < 2) return;
+
+  function positionTrack() {
+    const firstNum = steps[0].querySelector('.flow-num');
+    const lastNum = steps[steps.length - 1].querySelector('.flow-num');
+    if (!firstNum || !lastNum) return;
+
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const firstRect = firstNum.getBoundingClientRect();
+    const lastRect = lastNum.getBoundingClientRect();
+
+    const left = firstRect.left + firstRect.width / 2 - wrapperRect.left;
+    const right = lastRect.left + lastRect.width / 2 - wrapperRect.left;
+
+    track.style.left = left + 'px';
+    track.style.width = (right - left) + 'px';
+  }
+
+  positionTrack();
+  window.addEventListener('resize', positionTrack);
+
+  gsap.to(fill, {
+    width: '100%',
+    ease: 'none',
+    scrollTrigger: {
+      trigger: wrapper,
+      start: 'top 70%',
+      end: 'bottom 50%',
+      scrub: 0.5,
+    }
+  });
+}
+
+// ========================================
+// 6. Spotlight Terminal Typing Effect
+// ========================================
+
+function initSpotlightTyping() {
+  const terminal = document.querySelector('.spotlight-terminal-body');
+  if (!terminal) return;
+
+  const lines = terminal.children;
+  if (lines.length === 0) return;
+
+  gsap.set(lines, { opacity: 0, x: -12 });
+
+  const tl = gsap.timeline({
+    scrollTrigger: {
+      trigger: terminal,
+      start: 'top 80%',
+      once: true,
+    }
+  });
+
+  Array.from(lines).forEach((line, i) => {
+    tl.to(line, {
+      opacity: 1,
+      x: 0,
+      duration: 0.4,
+      ease: 'power2.out',
+    }, i * 0.15);
+  });
+}
+
+// ========================================
+// 7. Counter Animation on Flow Step Numbers
+// ========================================
+
+function initFlowCounters() {
+  const counters = document.querySelectorAll('.flow-num[data-count]');
+  counters.forEach(counter => {
+    const target = parseInt(counter.getAttribute('data-count'), 10);
+    counter.textContent = '0';
+
+    ScrollTrigger.create({
+      trigger: counter,
+      start: 'top 85%',
+      once: true,
+      onEnter: () => {
+        const obj = { val: 0 };
+        gsap.to(obj, {
+          val: target,
+          duration: 0.8,
+          ease: 'power2.out',
+          onUpdate: () => {
+            counter.textContent = Math.round(obj.val);
+          }
+        });
+      }
+    });
+  });
+}
+
+// ========================================
+// 8. Magnetic Button Effect
+// ========================================
+
+function initMagneticButtons() {
+  const buttons = document.querySelectorAll('.btn-primary');
+  const strength = 0.3;
+
+  buttons.forEach(btn => {
+    btn.addEventListener('mousemove', (e) => {
+      const rect = btn.getBoundingClientRect();
+      const x = e.clientX - rect.left - rect.width / 2;
+      const y = e.clientY - rect.top - rect.height / 2;
+      gsap.to(btn, {
+        x: x * strength,
+        y: y * strength,
+        duration: 0.3,
+        ease: 'power2.out',
+      });
+    });
+
+    btn.addEventListener('mouseleave', () => {
+      gsap.to(btn, {
+        x: 0,
+        y: 0,
+        duration: 0.6,
+        ease: 'elastic.out(1, 0.4)',
+      });
+    });
+  });
 }
 
 // ========================================
