@@ -38,7 +38,13 @@ export async function startServer(options: ServerOptions): Promise<void> {
     // Fallback is fine
   }
 
-  const router = createRouter({ apiKey, retriever, mcpServer, version });
+  const router = createRouter({
+    apiKey,
+    retriever,
+    mcpServer,
+    version,
+    config: config || ({} as Config),
+  });
   const server = createServer(router);
 
   // Graceful shutdown
@@ -60,6 +66,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       console.log(`  Health:  http://${host}:${port}/api/v1/health`);
       console.log(`  API:     http://${host}:${port}/api/v1/knowledge/...`);
       console.log(`  MCP:     http://${host}:${port}/mcp`);
+      console.log(`  Admin:   http://${host}:${port}/admin`);
       resolve();
     });
   });

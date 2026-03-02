@@ -13,7 +13,8 @@
   ],
   "scripts": {
     "dev": "tsx src/cli.tsx",
-    "build": "tsup && chmod +x dist/cli.js",
+    "build": "tsup && chmod +x dist/cli.js && npm run build:admin",
+    "build:admin": "node scripts/build-admin.mjs --minify",
     "lint": "eslint src --ext .ts,.tsx",
     "format": "prettier --write src",
     "typecheck": "tsc --noEmit",
@@ -61,6 +62,7 @@
     "ink": "^5.0.1",
     "ink-spinner": "^5.0.0",
     "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "yaml": "^2.4.0",
     "zod": "^3.23.0"
   },
@@ -78,6 +80,8 @@
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "^5.5.0",
+    "@types/react-dom": "^18.3.0",
+    "esbuild": "^0.24.0",
     "vitest": "^3.2.4"
   },
   "engines": {
