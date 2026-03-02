@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Safety & Control — RunbookAI</title>
+    <meta name="description" content="RunbookAI's safety model: approval gates, audit trails, self-hosted architecture, open source, and zero vendor lock-in." />
+    <link rel="canonical" href="https://userunbook.ai/security.html" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://userunbook.ai/security.html" />
+    <meta property="og:title" content="Safety & Control — RunbookAI" />
+    <meta property="og:description" content="RunbookAI's safety model: approval gates, audit trails, self-hosted, open source, zero vendor lock-in." />
+
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Background Effects -->
+    <div class="bg-noise"></div>
+    <div class="bg-glow"></div>
+
+    <!-- Navigation -->
+    <nav class="nav">
+      <div class="nav-container">
+        <a href="./" class="nav-logo">
+          <svg class="nav-logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="8" fill="url(#logo-gradient)"/>
+            <path d="M8 12h16M8 16h12M8 20h8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="24" cy="20" r="4" fill="white" fill-opacity="0.9"/>
+            <defs>
+              <linearGradient id="logo-gradient" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#8B5CF6"/>
+                <stop offset="1" stop-color="#6366F1"/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <span>RunbookAI</span>
+        </a>
+
+        <div class="nav-links">
+          <a href="docs.html" class="nav-link">Docs</a>
+          <a href="security.html" class="nav-link">Safety</a>
+          <a href="https://github.com/Runbook-Agent/RunbookAI" class="nav-link nav-link-gh" target="_blank" rel="noopener">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+            GitHub
+          </a>
+          <a href="#demo" class="nav-cta">Try the Demo</a>
+        </div>
+
+        <button class="nav-mobile-toggle" aria-label="Toggle menu" onclick="toggleMobileMenu()">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu" id="mobile-menu">
+      <a href="docs.html">Docs</a>
+      <a href="security.html">Safety & Control</a>
+      <a href="https://github.com/Runbook-Agent/RunbookAI" target="_blank" rel="noopener">GitHub</a>
+    </div>
+
+    <!-- Content -->
+    <div class="docs-layout">
+      <!-- Sidebar -->
+      <aside class="docs-sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Safety Model</div>
+          <ul class="sidebar-nav">
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#architecture">Architecture</a></li>
+            <li><a href="#approval-gates">Approval Gates</a></li>
+            <li><a href="#audit-trails">Audit Trails</a></li>
+          </ul>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Deployment</div>
+          <ul class="sidebar-nav">
+            <li><a href="#self-hosted">Self-Hosted</a></li>
+            <li><a href="#open-source">Open Source</a></li>
+            <li><a href="#no-lock-in">No Vendor Lock-In</a></li>
+          </ul>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="docs-content">
+        <h1>Safety & Control</h1>
+        <p>RunbookAI is built for production. Every design decision prioritizes safety, auditability, and your team's control over what runs in your infrastructure.</p>
+
+        <!-- Overview -->
+        <section id="overview">
+          <h2>Overview</h2>
+          <p>
+            Autonomous incident response is powerful — but only if you trust it. RunbookAI's safety model ensures no action is taken without explicit human approval, every step is logged, and you retain full ownership of your data and deployment.
+          </p>
+          <p>Three principles guide every feature:</p>
+          <ul>
+            <li><strong>Human-in-the-loop:</strong> Every mutation requires explicit approval before execution.</li>
+            <li><strong>Full observability:</strong> Every action, query, and decision is logged with complete context.</li>
+            <li><strong>Zero trust in the agent:</strong> RunbookAI assumes it can be wrong. It presents evidence and recommendations — your team decides.</li>
+          </ul>
+        </section>
+
+        <!-- Architecture -->
+        <section id="architecture">
+          <h2>Architecture & Safety Model</h2>
+          <p>
+            RunbookAI runs entirely within your infrastructure. There is no hosted service, no external data plane, and no telemetry sent back to us.
+          </p>
+
+          <div class="config-block">
+            <div class="config-header">Architecture</div>
+            <pre><code>┌──────────────────────────────────────────────────┐
+│                  Your Infrastructure              │
+│                                                   │
+│  ┌─────────┐    ┌──────────────┐    ┌──────────┐ │
+│  │  Alert   │───▶│  RunbookAI   │───▶│  Slack / │ │
+│  │  Source  │    │  Agent       │    │  Approval│ │
+│  └─────────┘    └──────┬───────┘    └──────────┘ │
+│                        │                          │
+│          ┌─────────────┼─────────────┐            │
+│          ▼             ▼             ▼            │
+│   ┌──────────┐  ┌──────────┐  ┌──────────┐      │
+│   │   AWS    │  │   K8s    │  │ Knowledge│      │
+│   │ (read)   │  │ (read)   │  │  Base    │      │
+│   └──────────┘  └──────────┘  └──────────┘      │
+│                                                   │
+│  All queries are read-only by default.            │
+│  Mutations require human approval via Slack.      │
+└──────────────────────────────────────────────────┘</code></pre>
+          </div>
+
+          <p>Key properties:</p>
+          <ul>
+            <li><strong>Local execution:</strong> The agent runs as a CLI process or self-hosted server on your machines.</li>
+            <li><strong>Read-only by default:</strong> Infrastructure queries (AWS, Kubernetes, CloudWatch) are read-only. No write operations without approval.</li>
+            <li><strong>LLM calls go direct:</strong> API calls to your configured LLM provider go directly from your network. RunbookAI never proxies or stores prompts.</li>
+            <li><strong>No phone-home:</strong> Zero telemetry, no usage tracking, no analytics sent externally.</li>
+          </ul>
+        </section>
+
+        <!-- Approval Gates -->
+        <section id="approval-gates">
+          <h2>Approval Gates</h2>
+          <p>
+            Every mutating action — scaling a deployment, restarting a service, modifying a configuration — requires explicit human approval before execution. This is not optional; it's the core safety mechanism.
+          </p>
+
+          <h3>How it works</h3>
+          <ol>
+            <li>RunbookAI identifies a potential remediation (e.g., "scale payment-service to 5 replicas").</li>
+            <li>The proposed action is sent to your team via Slack with full context: what will change, why, and supporting evidence.</li>
+            <li>A team member approves or rejects the action directly in Slack.</li>
+            <li>Only after approval does RunbookAI execute the command.</li>
+          </ol>
+
+          <div class="info-box info-box-tip">
+            <div class="info-box-title">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Defense in depth
+            </div>
+            <p>Approval gates work independently of runbook permissions. Even if a runbook allows a mutation, the gate still requires human sign-off at execution time.</p>
+          </div>
+
+          <h3>Granular control</h3>
+          <p>Configure approval requirements per-action, per-environment, or per-team:</p>
+
+          <div class="config-block">
+            <div class="config-header">runbook.config.yaml</div>
+            <pre><code>safety:
+  approval_required: true          # Global default
+  auto_approve_reads: true         # Skip approval for read-only queries
+  approval_channel: "#incident-ops"
+  timeout: 300                     # Seconds to wait for approval
+
+environments:
+  production:
+    approval_required: true        # Always require in prod
+  staging:
+    approval_required: false       # Auto-approve in staging</code></pre>
+          </div>
+        </section>
+
+        <!-- Audit Trails -->
+        <section id="audit-trails">
+          <h2>Audit Trails</h2>
+          <p>
+            Every action RunbookAI takes is logged with full context: what was done, why, who approved it, and what evidence led to the decision. This creates a complete, queryable record of every incident investigation.
+          </p>
+
+          <h3>What gets logged</h3>
+          <ul>
+            <li><strong>Hypotheses formed:</strong> Ranked list with confidence scores and reasoning.</li>
+            <li><strong>Evidence gathered:</strong> Every query, its target system, and the response.</li>
+            <li><strong>Actions proposed:</strong> The exact command, expected impact, and supporting evidence.</li>
+            <li><strong>Approval decisions:</strong> Who approved/rejected, when, and any comments.</li>
+            <li><strong>Execution results:</strong> Command output, success/failure, and post-action state.</li>
+          </ul>
+
+          <p>Audit logs are stored locally alongside your investigation results. Export them to your existing logging infrastructure or compliance tools — there are no proprietary formats.</p>
+        </section>
+
+        <!-- Self-Hosted -->
+        <section id="self-hosted">
+          <h2>Self-Hosted</h2>
+          <p>
+            RunbookAI runs entirely on your infrastructure. There is no SaaS component, no hosted control plane, and no external dependency beyond your chosen LLM provider.
+          </p>
+          <ul>
+            <li><strong>CLI mode:</strong> Run directly on any engineer's machine as a local process.</li>
+            <li><strong>Server mode:</strong> Deploy the shared knowledge server within your network for team-wide access.</li>
+            <li><strong>Your LLM, your keys:</strong> Bring your own Anthropic (or other provider) API key. Calls go direct from your network.</li>
+            <li><strong>Your data stays yours:</strong> Runbooks, knowledge bases, investigation results, and audit logs never leave your infrastructure.</li>
+          </ul>
+
+          <div class="info-box info-box-tip">
+            <div class="info-box-title">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              Air-gapped compatible
+            </div>
+            <p>With a self-hosted LLM, RunbookAI can operate in fully air-gapped environments with zero external network access.</p>
+          </div>
+        </section>
+
+        <!-- Open Source -->
+        <section id="open-source">
+          <h2>Open Source</h2>
+          <p>
+            RunbookAI is released under the <strong>MIT License</strong>. The entire codebase — agent logic, integrations, knowledge indexing, safety mechanisms — is open for inspection, modification, and contribution.
+          </p>
+          <ul>
+            <li><strong>Full source available:</strong> Every line of code that runs in your infrastructure is auditable.</li>
+            <li><strong>No hidden services:</strong> There are no closed-source components, proprietary plugins, or opaque backends.</li>
+            <li><strong>Community-driven:</strong> Security issues are reported and fixed in the open. No security-through-obscurity.</li>
+            <li><strong>Fork-friendly:</strong> MIT license means you can modify, redistribute, and build on RunbookAI without restriction.</li>
+          </ul>
+        </section>
+
+        <!-- No Vendor Lock-In -->
+        <section id="no-lock-in">
+          <h2>No Vendor Lock-In</h2>
+          <p>
+            RunbookAI is designed to integrate with your existing stack, not replace it. Every component is swappable, every format is standard, and there is no proprietary data layer.
+          </p>
+          <ul>
+            <li><strong>Standard runbook format:</strong> Markdown with YAML frontmatter. Your runbooks work with or without RunbookAI.</li>
+            <li><strong>Bring any LLM:</strong> Swap providers (Anthropic, OpenAI, local models) without changing your runbooks or configuration.</li>
+            <li><strong>No proprietary APIs:</strong> All integrations use the official APIs of the tools you already run (AWS SDK, Kubernetes API, PagerDuty API).</li>
+            <li><strong>Plain-text everything:</strong> Configuration is YAML. Knowledge sources are Markdown. Logs are structured JSON. No proprietary formats.</li>
+          </ul>
+
+          <div class="info-box info-box-warning">
+            <div class="info-box-title">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Uninstall cleanly
+            </div>
+            <p>If you stop using RunbookAI, you keep everything: your runbooks, knowledge, and investigation history. Nothing is locked behind a proprietary format or service.</p>
+          </div>
+        </section>
+
+        <!-- Help box -->
+        <div class="info-box info-box-tip" style="margin-top: var(--space-3xl);">
+          <div class="info-box-title">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Questions about security?
+          </div>
+          <p>Open a <a href="https://github.com/Runbook-Agent/RunbookAI/discussions" target="_blank" rel="noopener">GitHub Discussion</a> or file an <a href="https://github.com/Runbook-Agent/RunbookAI/issues" target="_blank" rel="noopener">issue</a>. Security-related reports can be sent directly via GitHub's private vulnerability reporting.</p>
+        </div>
+      </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-content">
+          <div class="footer-brand">
+            <a href="./" class="footer-logo">
+              <svg class="footer-logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="url(#footer-logo-gradient)"/>
+                <path d="M8 12h16M8 16h12M8 20h8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="24" cy="20" r="4" fill="white" fill-opacity="0.9"/>
+                <defs>
+                  <linearGradient id="footer-logo-gradient" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#8B5CF6"/>
+                    <stop offset="1" stop-color="#6366F1"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+              <span>RunbookAI</span>
+            </a>
+            <p>AI-powered incident response for modern SRE teams.</p>
+          </div>
+
+          <div class="footer-links">
+            <div class="footer-column">
+              <h4>Product</h4>
+              <a href="docs.html">Docs</a>
+              <a href="./#features">Features</a>
+              <a href="security.html">Safety & Control</a>
+            </div>
+            <div class="footer-column">
+              <h4>Resources</h4>
+              <a href="https://github.com/Runbook-Agent/RunbookAI" target="_blank" rel="noopener">GitHub</a>
+              <a href="https://github.com/Runbook-Agent/RunbookAI/issues" target="_blank" rel="noopener">Issues</a>
+              <a href="https://github.com/Runbook-Agent/RunbookAI/discussions" target="_blank" rel="noopener">Discussions</a>
+            </div>
+            <div class="footer-column">
+              <h4>Connect</h4>
+              <a href="https://github.com/Runbook-Agent/RunbookAI/discussions" target="_blank" rel="noopener">Community</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer-bottom">
+          <p>Released under the MIT License.</p>
+        </div>
+      </div>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
