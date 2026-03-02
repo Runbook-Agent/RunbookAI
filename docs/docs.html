@@ -68,6 +68,7 @@
           <ul class="sidebar-nav">
             <li><a href="#installation" class="active">Installation</a></li>
             <li><a href="#configuration">Configuration</a></li>
+            <li><a href="#aws-k8s-pagerduty-slack">3-Step AWS+K8s Path</a></li>
             <li><a href="#first-query">First Query</a></li>
           </ul>
         </div>
@@ -265,6 +266,34 @@ server:
   # Server: configure the server itself
   port: 4000
   host: 0.0.0.0</code></pre>
+        </div>
+
+        <h2 id="aws-k8s-pagerduty-slack">Opinionated Onboarding: AWS + Kubernetes + PagerDuty + Slack</h2>
+        <p>Use this path if you want the fastest practical production setup for one on-call team.</p>
+
+        <h3>Step 1: Install the CLI and verify cloud/cluster access</h3>
+        <p>Install RunbookAI, then validate AWS identity and Kubernetes connectivity. Reference: <a href="#installation">Installation</a>, <a href="#aws">AWS integration</a>, <a href="#kubernetes">Kubernetes integration</a>.</p>
+        <div class="config-block">
+          <div class="config-header">Terminal</div>
+          <pre><code>npm install -g @runbook-agent/runbook
+aws sts get-caller-identity
+kubectl config current-context</code></pre>
+        </div>
+
+        <h3>Step 2: Run setup wizard with this integration profile</h3>
+        <p>Run the wizard and enable AWS, Kubernetes, PagerDuty, and Slack when prompted. Reference: <a href="#configuration">Configuration</a>, <a href="#pagerduty">PagerDuty</a>, <a href="#slack">Slack</a>.</p>
+        <div class="config-block">
+          <div class="config-header">Terminal</div>
+          <pre><code>runbook init</code></pre>
+        </div>
+
+        <h3>Step 3: Validate incident workflow end to end</h3>
+        <p>Verify infra access, investigate a PagerDuty incident, and start Slack intake. Reference: <a href="#status">runbook status</a>, <a href="#investigate">runbook investigate</a>, <a href="#slack-gateway">runbook slack-gateway</a>.</p>
+        <div class="config-block">
+          <div class="config-header">Terminal</div>
+          <pre><code>runbook status
+runbook investigate PD-12345
+runbook slack-gateway --mode socket</code></pre>
         </div>
 
         <!-- First Query -->
