@@ -80,6 +80,7 @@
             <li><a href="#knowledge">runbook knowledge</a></li>
             <li><a href="#status">runbook status</a></li>
             <li><a href="#slack-gateway">runbook slack-gateway</a></li>
+            <li><a href="#server">runbook server</a></li>
           </ul>
         </div>
 
@@ -253,7 +254,17 @@ knowledge:
       clientId: ${GOOGLE_CLIENT_ID}
       clientSecret: ${GOOGLE_CLIENT_SECRET}
       refreshToken: ${GOOGLE_REFRESH_TOKEN}
-      includeSubfolders: true</code></pre>
+      includeSubfolders: true
+
+# Shared knowledge server (optional)
+server:
+  # Client: point CLI at a shared server
+  # url: http://runbook.internal:4000
+  # apiKey: ${RUNBOOK_SERVER_API_KEY}
+
+  # Server: configure the server itself
+  port: 4000
+  host: 0.0.0.0</code></pre>
         </div>
 
         <!-- First Query -->
@@ -349,6 +360,76 @@ runbook slack-gateway --mode socket
 
 # Production (HTTP Events API)
 runbook slack-gateway --mode http --port 3001</code></pre>
+        </div>
+
+        <h3 id="server">runbook server</h3>
+        <p>Start a shared knowledge server so your whole team can query the same runbooks, postmortems, and known issues over HTTP. The server exposes a REST API and an MCP endpoint for Claude Code.</p>
+
+        <div class="config-block">
+          <div class="config-header">Terminal</div>
+          <pre><code># Start the server
+RUNBOOK_SERVER_API_KEY=secret runbook server --port 4000
+
+# Options
+#   --port &lt;port&gt;      Server port (default: 4000)
+#   --host &lt;host&gt;      Bind host (default: 0.0.0.0)
+#   --base-dir &lt;dir&gt;   Knowledge base directory (default: .runbook)
+#   --api-key &lt;key&gt;    API key (or set RUNBOOK_SERVER_API_KEY)</code></pre>
+        </div>
+
+        <h4>API Endpoints</h4>
+        <ul>
+          <li><code>GET /api/v1/health</code> &mdash; Health check (no auth required)</li>
+          <li><code>POST /api/v1/knowledge/search</code> &mdash; Search the knowledge base</li>
+          <li><code>GET /api/v1/knowledge/stats</code> &mdash; Document counts by type</li>
+          <li><code>GET /api/v1/knowledge/documents</code> &mdash; List all documents</li>
+          <li><code>GET /api/v1/knowledge/services</code> &mdash; List services with documentation</li>
+          <li><code>POST /api/v1/knowledge/sync</code> &mdash; Trigger a knowledge sync</li>
+          <li><code>POST /mcp</code> &mdash; MCP Streamable HTTP (JSON-RPC)</li>
+        </ul>
+
+        <p>All endpoints except health require a <code>Bearer</code> token via the <code>Authorization</code> header.</p>
+
+        <h4>Connecting a CLI to the Server</h4>
+        <p>Point any RunbookAI CLI at the shared server by adding <code>server</code> to its config:</p>
+
+        <div class="config-block">
+          <div class="config-header">.runbook/config.yaml (client)</div>
+          <pre><code>server:
+  url: http://runbook.internal:4000
+  apiKey: ${RUNBOOK_SERVER_API_KEY}</code></pre>
+        </div>
+
+        <p>When <code>server.url</code> is set, <code>runbook knowledge search</code> and all MCP tools will query the remote server instead of local SQLite.</p>
+
+        <h4>Server-Side Configuration</h4>
+        <p>The server uses the same <code>.runbook/config.yaml</code> for knowledge sources. Configure all your team's sources once:</p>
+
+        <div class="config-block">
+          <div class="config-header">.runbook/config.yaml (server)</div>
+          <pre><code>server:
+  port: 4000
+  apiKey: ${RUNBOOK_SERVER_API_KEY}
+
+knowledge:
+  sources:
+    - type: confluence
+      baseUrl: https://company.atlassian.net/wiki
+      spaceKey: OPS
+      auth:
+        email: ${CONFLUENCE_EMAIL}
+        apiToken: ${CONFLUENCE_API_TOKEN}
+
+    - type: filesystem
+      path: /opt/runbooks</code></pre>
+        </div>
+
+        <div class="info-box info-box-tip">
+          <div class="info-box-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            MCP Remote Connection
+          </div>
+          <p>Claude Code can connect to the server directly as a remote MCP server using the <code>/mcp</code> endpoint. Add it to your Claude Code MCP config with <code>{"url": "http://runbook.internal:4000/mcp", "headers": {"Authorization": "Bearer YOUR_KEY"}}</code>.</p>
         </div>
 
         <!-- Integrations -->

@@ -99,6 +99,7 @@ npm run dev -- investigate PD-12345
 - Optional GitHub/GitLab code-fix candidate retrieval during remediation planning.
 - Claude Code integration with context injection and safety hooks.
 - MCP server exposing searchable operational knowledge.
+- Shared knowledge server for teams — self-host a single knowledge API that all CLIs connect to.
 
 ## Commands
 
@@ -192,6 +193,40 @@ runbook slack-gateway --mode http --port 3001
 ```
 
 See setup details in [docs/SLACK_GATEWAY.md](./docs/SLACK_GATEWAY.md).
+
+### `runbook server`
+
+Start a shared knowledge server so your whole team can query the same runbooks, postmortems, and known issues.
+
+```bash
+# Start the server
+RUNBOOK_SERVER_API_KEY=secret runbook server --port 4000
+
+# Test health
+curl http://localhost:4000/api/v1/health
+
+# Search via API
+curl -H "Authorization: Bearer secret" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"high latency"}' \
+  http://localhost:4000/api/v1/knowledge/search
+```
+
+Options:
+- `--port <port>` — Server port (default: 4000)
+- `--host <host>` — Bind host (default: 0.0.0.0)
+- `--base-dir <dir>` — Knowledge base directory (default: .runbook)
+- `--api-key <key>` — API key (or set `RUNBOOK_SERVER_API_KEY`)
+
+Point any CLI at the server by adding `server` to its config:
+
+```yaml
+server:
+  url: http://runbook.internal:4000
+  apiKey: ${RUNBOOK_SERVER_API_KEY}
+```
+
+The server also exposes an MCP endpoint at `/mcp` for Claude Code remote MCP connections.
 
 ### Claude Code Integration
 
@@ -351,6 +386,16 @@ knowledge:
       clientSecret: ${GOOGLE_CLIENT_SECRET}
       refreshToken: ${GOOGLE_REFRESH_TOKEN}
       includeSubfolders: true
+
+# Shared knowledge server (optional)
+server:
+  # Client mode: point CLI at a shared server
+  # url: http://runbook.internal:4000
+  # apiKey: ${RUNBOOK_SERVER_API_KEY}
+
+  # Server mode: configure the server itself
+  port: 4000
+  host: 0.0.0.0
 
 integrations:
   claude:
@@ -553,6 +598,7 @@ Release Please uses Conventional Commits for semver bumping:
 - `feat!:` or `BREAKING CHANGE:` -> major
 
 ## What's New
+- Shared knowledge server (`runbook server`) lets teams self-host a shared knowledge API with HTTP and MCP endpoints. CLIs connect via `server.url` in config.
 - Dynamic runtime skills now execute workflow steps with approval hooks.
 - Kubernetes tooling is available as a read-only query surface and can be gated with `providers.kubernetes.enabled`.
 - Investigation evaluation now supports RCAEval, Rootly, and TraceRCA via a unified runner (`npm run eval:all -- ...`).
