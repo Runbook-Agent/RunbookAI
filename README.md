@@ -218,6 +218,8 @@ Options:
 - `--base-dir <dir>` — Knowledge base directory (default: .runbook)
 - `--api-key <key>` — API key (or set `RUNBOOK_SERVER_API_KEY`)
 
+The server includes a built-in admin UI at `http://localhost:4000/admin` for managing the knowledge base.
+
 Point any CLI at the server by adding `server` to its config:
 
 ```yaml

@@ -8,20 +8,22 @@
 
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { IKnowledgeRetriever } from '../knowledge/retriever/types';
-import type { KnowledgeType } from '../knowledge/types';
+import type { KnowledgeDocument, KnowledgeType } from '../knowledge/types';
+import type { Config } from '../utils/config';
 import type { MCPServer } from '../mcp/server';
 import { handleMcpRequest } from './mcp-transport';
-import { authenticateRequest, readBody, sendJson } from './utils';
+import { authenticateRequest, readBody, sendJson, serveAdminFile } from './utils';
 
 export interface RouterConfig {
   apiKey: string;
   retriever: IKnowledgeRetriever;
   mcpServer: MCPServer;
   version: string;
+  config: Config;
 }
 
-export function createRouter(config: RouterConfig) {
-  const { apiKey, retriever, mcpServer, version } = config;
+export function createRouter(routerConfig: RouterConfig) {
+  const { apiKey, retriever, mcpServer, version, config } = routerConfig;
   const startTime = Date.now();
 
   return async (req: IncomingMessage, res: ServerResponse) => {
@@ -44,7 +46,9 @@ export function createRouter(config: RouterConfig) {
     // MCP endpoint
     if (path === '/mcp') {
       if (!authenticateRequest(req, apiKey)) {
-        sendJson(res, 401, { error: { code: 'unauthorized', message: 'Invalid or missing API key' } });
+        sendJson(res, 401, {
+          error: { code: 'unauthorized', message: 'Invalid or missing API key' },
+        });
         return;
       }
       await handleMcpRequest(req, res, mcpServer);
@@ -54,7 +58,9 @@ export function createRouter(config: RouterConfig) {
     // All other API routes require auth
     if (path.startsWith('/api/v1/knowledge/')) {
       if (!authenticateRequest(req, apiKey)) {
-        sendJson(res, 401, { error: { code: 'unauthorized', message: 'Invalid or missing API key' } });
+        sendJson(res, 401, {
+          error: { code: 'unauthorized', message: 'Invalid or missing API key' },
+        });
         return;
       }
 
@@ -85,6 +91,18 @@ export function createRouter(config: RouterConfig) {
           await handleSync(res, retriever, start);
           return;
         }
+
+        if (path === '/api/v1/knowledge/sources' && method === 'GET') {
+          handleSources(res, config, start);
+          return;
+        }
+
+        // Document CRUD by ID: /api/v1/knowledge/documents/:id
+        if (path.startsWith('/api/v1/knowledge/documents/') && path.split('/').length === 6) {
+          const id = decodeURIComponent(path.split('/')[5]);
+          await handleDocumentById(req, res, retriever, id, method, start);
+          return;
+        }
       } catch (error) {
         sendJson(res, 500, {
           error: {
@@ -95,6 +113,12 @@ export function createRouter(config: RouterConfig) {
         });
         return;
       }
+    }
+
+    // Admin UI — serve static files from admin-dist
+    if (path === '/admin' || path.startsWith('/admin/')) {
+      await serveAdminFile(path, res);
+      return;
     }
 
     // Not found
@@ -200,4 +224,95 @@ async function handleSync(
 ): Promise<void> {
   const result = await retriever.sync();
   sendJson(res, 200, { data: result, meta: { durationMs: Date.now() - start } });
+}
+
+async function handleDocumentById(
+  req: IncomingMessage,
+  res: ServerResponse,
+  retriever: IKnowledgeRetriever,
+  id: string,
+  method: string,
+  start: number
+): Promise<void> {
+  if (method === 'GET') {
+    if (!retriever.getDocument) {
+      sendJson(res, 501, {
+        error: { code: 'not_implemented', message: 'getDocument not supported' },
+      });
+      return;
+    }
+    const doc = await retriever.getDocument(id);
+    if (!doc) {
+      sendJson(res, 404, { error: { code: 'not_found', message: `Document ${id} not found` } });
+      return;
+    }
+    sendJson(res, 200, { data: doc, meta: { durationMs: Date.now() - start } });
+    return;
+  }
+
+  if (method === 'PUT') {
+    if (!retriever.getDocument || !retriever.upsertDocument) {
+      sendJson(res, 501, {
+        error: { code: 'not_implemented', message: 'upsertDocument not supported' },
+      });
+      return;
+    }
+    const body = await readBody(req);
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      sendJson(res, 400, { error: { code: 'bad_request', message: 'Invalid JSON body' } });
+      return;
+    }
+
+    const existing = await retriever.getDocument(id);
+    if (!existing) {
+      sendJson(res, 404, { error: { code: 'not_found', message: `Document ${id} not found` } });
+      return;
+    }
+
+    const updated: KnowledgeDocument = {
+      ...existing,
+      title: typeof parsed.title === 'string' ? parsed.title : existing.title,
+      content: typeof parsed.content === 'string' ? parsed.content : existing.content,
+      type: typeof parsed.type === 'string' ? (parsed.type as KnowledgeType) : existing.type,
+      services: Array.isArray(parsed.services) ? parsed.services.map(String) : existing.services,
+      tags: Array.isArray(parsed.tags) ? parsed.tags.map(String) : existing.tags,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await retriever.upsertDocument(updated);
+    sendJson(res, 200, { data: updated, meta: { durationMs: Date.now() - start } });
+    return;
+  }
+
+  if (method === 'DELETE') {
+    if (!retriever.deleteDocument) {
+      sendJson(res, 501, {
+        error: { code: 'not_implemented', message: 'deleteDocument not supported' },
+      });
+      return;
+    }
+    await retriever.deleteDocument(id);
+    sendJson(res, 200, { data: { deleted: true }, meta: { durationMs: Date.now() - start } });
+    return;
+  }
+
+  sendJson(res, 405, { error: { code: 'method_not_allowed', message: `${method} not allowed` } });
+}
+
+function handleSources(res: ServerResponse, config: Config, start: number): void {
+  const sources = (config.knowledge?.sources || []).map((s) => ({
+    type: s.type,
+    path: s.path,
+    repo: s.repo,
+    branch: s.branch,
+    baseUrl: s.baseUrl,
+    spaceKey: s.spaceKey,
+    endpoint: s.endpoint,
+    databaseId: s.databaseId,
+    authConfigured: !!s.auth,
+  }));
+  sendJson(res, 200, { data: sources, meta: { durationMs: Date.now() - start } });
 }

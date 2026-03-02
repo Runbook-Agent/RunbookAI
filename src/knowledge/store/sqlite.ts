@@ -317,6 +317,14 @@ export class KnowledgeStore {
   }
 
   /**
+   * Delete a document and its chunks by ID
+   */
+  deleteDocument(id: string): void {
+    this.db.prepare('DELETE FROM chunks WHERE document_id = ?').run(id);
+    this.db.prepare('DELETE FROM documents WHERE id = ?').run(id);
+  }
+
+  /**
    * Clear all documents
    */
   clear(): void {
