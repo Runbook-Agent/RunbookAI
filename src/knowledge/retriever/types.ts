@@ -22,4 +22,9 @@ export interface IKnowledgeRetriever {
   getDocumentCountsByType(): Record<KnowledgeType, number> | Promise<Record<KnowledgeType, number>>;
   getAllDocuments(): KnowledgeDocument[] | Promise<KnowledgeDocument[]>;
   close(): void;
+
+  // Optional CRUD methods (available on local retriever, not remote)
+  getDocument?(id: string): KnowledgeDocument | null | Promise<KnowledgeDocument | null>;
+  upsertDocument?(doc: KnowledgeDocument): void | Promise<void>;
+  deleteDocument?(id: string): void | Promise<void>;
 }

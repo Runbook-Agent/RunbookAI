@@ -20,5 +20,17 @@
   "env": {
     "node": true,
     "es2022": true
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/server/admin/**/*.{ts,tsx}"],
+      "parserOptions": {
+        "project": "./src/server/admin/tsconfig.json"
+      },
+      "env": {
+        "browser": true,
+        "node": false
+      }
+    }
+  ]
 }

@@ -368,6 +368,27 @@ export class KnowledgeRetriever {
   }
 
   /**
+   * Get a single document by ID.
+   */
+  getDocument(id: string): KnowledgeDocument | null {
+    return this.store.getDocument(id);
+  }
+
+  /**
+   * Insert or update a document.
+   */
+  upsertDocument(doc: KnowledgeDocument): void {
+    this.store.upsertDocument(doc);
+  }
+
+  /**
+   * Delete a document by ID.
+   */
+  deleteDocument(id: string): void {
+    this.store.deleteDocument(id);
+  }
+
+  /**
    * Close stores.
    */
   close(): void {
