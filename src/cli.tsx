@@ -1532,7 +1532,7 @@ knowledge
       const retriever = await createConfiguredRetriever();
       const { added, updated } = await retriever.sync();
       console.log(chalk.green(`Sync complete: ${added} added, ${updated} updated`));
-      console.log(chalk.green(`Total documents: ${retriever.getDocumentCount()}`));
+      console.log(chalk.green(`Total documents: ${await retriever.getDocumentCount()}`));
       retriever.close();
     } catch (error) {
       console.error(chalk.red(`Sync failed: ${error instanceof Error ? error.message : error}`));
@@ -1665,7 +1665,7 @@ knowledge
       await retriever.sync();
 
       // Get all documents directly from the store for accurate counts.
-      const allDocs = retriever.getAllDocuments();
+      const allDocs = await retriever.getAllDocuments();
 
       const stale: Array<{ title: string; type: string; age: number }> = [];
       const fresh: Array<{ title: string; type: string }> = [];
@@ -1721,13 +1721,13 @@ knowledge
       const retriever = await createConfiguredRetriever();
       await retriever.sync();
 
-      const counts = retriever.getDocumentCountsByType();
+      const counts = await retriever.getDocumentCountsByType();
 
       console.log(chalk.cyan(`  Runbooks: ${counts.runbook}`));
       console.log(chalk.cyan(`  Post-mortems: ${counts.postmortem}`));
       console.log(chalk.cyan(`  Architecture docs: ${counts.architecture}`));
       console.log(chalk.cyan(`  Known issues: ${counts.known_issue}`));
-      console.log(chalk.green(`  Total: ${retriever.getDocumentCount()} documents`));
+      console.log(chalk.green(`  Total: ${await retriever.getDocumentCount()} documents`));
 
       retriever.close();
     } catch (error) {
@@ -2325,6 +2325,61 @@ program
       process.exit(1);
     }
   });
+
+// Shared knowledge server command
+program
+  .command('server')
+  .description('Start the RunbookAI shared knowledge server')
+  .option('-p, --port <port>', 'Port to listen on', '4000')
+  .option('--host <host>', 'Host to bind to', '0.0.0.0')
+  .option('--base-dir <dir>', 'Knowledge base directory', '.runbook')
+  .option('--api-key <key>', 'API key for authentication')
+  .action(
+    async (options: { port: string; host: string; baseDir: string; apiKey?: string }) => {
+      const apiKey =
+        options.apiKey || process.env.RUNBOOK_SERVER_API_KEY;
+
+      if (!apiKey) {
+        console.error(chalk.red('Error: API key is required'));
+        console.log(
+          chalk.yellow('Set --api-key flag or RUNBOOK_SERVER_API_KEY environment variable')
+        );
+        process.exit(1);
+      }
+
+      const port = parseInt(options.port, 10);
+      if (isNaN(port) || port < 1 || port > 65535) {
+        console.error(chalk.red('Error: Invalid port number'));
+        process.exit(1);
+      }
+
+      console.log(chalk.cyan('Starting RunbookAI server...'));
+      console.log(chalk.gray(`Port: ${port}`));
+      console.log(chalk.gray(`Host: ${options.host}`));
+      console.log(chalk.gray(`Base dir: ${options.baseDir}`));
+
+      try {
+        const { startServer } = await import('./server/index');
+        await startServer({
+          port,
+          host: options.host,
+          baseDir: options.baseDir,
+          apiKey,
+        });
+
+        console.log('');
+        console.log(chalk.green('Server is running!'));
+        console.log(chalk.yellow('Press Ctrl+C to stop'));
+      } catch (error) {
+        console.error(
+          chalk.red(
+            `Failed to start server: ${error instanceof Error ? error.message : error}`
+          )
+        );
+        process.exit(1);
+      }
+    }
+  );
 
 // Slack events gateway command
 program

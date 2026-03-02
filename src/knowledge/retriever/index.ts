@@ -20,6 +20,8 @@ import type {
   KnowledgeDocument,
   ApiSourceConfig,
 } from '../types';
+import type { IKnowledgeRetriever } from './types';
+export type { IKnowledgeRetriever } from './types';
 
 const DEFAULT_LIMIT = 20;
 const DEFAULT_RRF_K = 60;
@@ -635,13 +637,22 @@ export function createRetriever(baseDir: string = '.runbook'): KnowledgeRetrieve
 
 /**
  * Create a retriever from runtime config when available.
+ * Returns a RemoteKnowledgeRetriever if config.server.url is set,
+ * otherwise returns a local KnowledgeRetriever.
  */
 export async function createConfiguredRetriever(
   baseDir: string = '.runbook',
   runtimeConfig?: Config
-): Promise<KnowledgeRetriever> {
+): Promise<IKnowledgeRetriever> {
   const configPath = resolveConfigPathForBaseDir(baseDir);
   const config = runtimeConfig ?? (await loadConfig(configPath));
+
+  // Remote mode: delegate to server
+  if (config.server?.url) {
+    const apiKey = config.server.apiKey || process.env.RUNBOOK_SERVER_API_KEY || '';
+    const { RemoteKnowledgeRetriever } = await import('./remote');
+    return new RemoteKnowledgeRetriever(config.server.url, apiKey);
+  }
 
   const embedderApiKey =
     process.env.OPENAI_API_KEY ||

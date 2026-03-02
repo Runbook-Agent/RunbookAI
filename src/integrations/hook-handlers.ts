@@ -8,7 +8,8 @@
 import { existsSync } from 'fs';
 import { readFile, writeFile, mkdir, appendFile } from 'fs/promises';
 import { join, resolve } from 'path';
-import { createConfiguredRetriever, KnowledgeRetriever } from '../knowledge/retriever/index';
+import { createConfiguredRetriever } from '../knowledge/retriever/index';
+import type { IKnowledgeRetriever } from '../knowledge/retriever/types';
 import type { RetrievedKnowledge, RetrievedChunk } from '../knowledge/types';
 import { createCheckpoint, createCheckpointStore } from '../session';
 
@@ -89,7 +90,7 @@ const DEFAULT_CONFIG: HookHandlerConfig = {
 const RETRIEVER_IDLE_TTL_MS = 2 * 60 * 1000;
 
 interface CachedRetriever {
-  retriever: KnowledgeRetriever;
+  retriever: IKnowledgeRetriever;
   lastUsedAt: number;
 }
 
@@ -118,7 +119,7 @@ function pruneRetrieverCache(): void {
   }
 }
 
-async function getCachedRetriever(baseDir: string): Promise<KnowledgeRetriever> {
+async function getCachedRetriever(baseDir: string): Promise<IKnowledgeRetriever> {
   pruneRetrieverCache();
   const key = normalizeBaseDir(baseDir);
   const cached = retrieverCache.get(key);
@@ -368,7 +369,7 @@ export async function handleSessionStart(
 
   try {
     const retriever = await getCachedRetriever(config.baseDir);
-    const counts = retriever.getDocumentCountsByType();
+    const counts = await retriever.getDocumentCountsByType();
     const total = Object.values(counts).reduce((sum, c) => sum + c, 0);
 
     if (total > 0) {
